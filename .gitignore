@@ -3,3 +3,4 @@ logs/
 *.jsonl
 .env
 fixtures/mined/
+fixtures/scenarios/

@@ -24,10 +24,10 @@ export function defaultAnswer(question: Question, context: AnswerContext = {}): 
 	}
 	if(question.kind === "dialog") {
 		const text = question.text ?? "";
-		// a fight the king did not ask for, a recruitment prompt (the plan recruits in towns), and paid experience (too early to buy)
+		// a fight the king did not ask for and paid experience (too early to buy); dwelling recruitment is accepted and handled by the loop
 		if(/wish to fight|attack the/i.test(text))
 			return context.allowFight ? 1 : 0;
-		if(/recruit/i.test(text) || /Tree of Knowledge/i.test(text))
+		if(/Tree of Knowledge/i.test(text))
 			return 0;
 		return 1;
 	}

@@ -9,7 +9,7 @@ import { defaultAnswer } from "../src/questions.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
 import { nextTurn } from "../src/turn.js";
-import { loadLoopState, newLoopState, playTurn, saveLoopState } from "../src/loop.js";
+import { loadLoopState, newLoopState, playGame, playTurn, saveLoopState } from "../src/loop.js";
 import type { Site } from "../src/missions.js";
 import type { Resources } from "../src/state.js";
 import { startFakeBridge } from "./fakeBridge.js";
@@ -207,12 +207,88 @@ describe("nextTurn", () => {
 });
 
 describe("defaultAnswer", () => {
-	it("declines unrequested fights, recruit prompts and paid experience; fights when the mission says so", () => {
+	it("declines unrequested fights and paid experience, accepts recruit prompts; fights when the mission says so", () => {
 		const dialog = (text: string) => ({ id: 1, kind: "dialog", text });
 		expect(defaultAnswer(dialog("Much to your dismay, the Monastery is guarded by several Monks.\n\nDo you wish to fight the guards?"))).toBe(0);
 		expect(defaultAnswer(dialog("Much to your dismay, the Monastery is guarded by several Monks.\n\nDo you wish to fight the guards?"), { allowFight: true })).toBe(1);
-		expect(defaultAnswer(dialog("{Monastery}\n\nWould you like to recruit Monks?"))).toBe(0);
+		expect(defaultAnswer(dialog("{Monastery}\n\nWould you like to recruit Monks?"))).toBe(1);
 		expect(defaultAnswer(dialog("{Tree of Knowledge}\n\nUpon your approach, the tree opens its eyes in delight."))).toBe(0);
 		expect(defaultAnswer(dialog("{Chest}\n\nYou may take the gold or distribute it to the peasants for experience."))).toBe(1);
+	});
+});
+
+describe("recruiting at a dwelling on the map", () => {
+	async function visit(armyCreatures: string[], gold: number) {
+		const calls: Array<{ cmd: string; args: any }> = [];
+		let phase = 0;
+		const server = await startFakeBridge((cmd, args: any) => {
+			calls.push({ cmd, args });
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 3, week: 1, dayOfWeek: 3, resources: res({ gold }), towns: [],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 1500, army: armyCreatures.map((creature, slot) => ({ creature, count: 5, slot })), primarySkills: {} }],
+				};
+			case "targets":
+				return [site(62, "creatureGeneratorCommon", "", "Monastery", 0)];
+			case "move_hero":
+				return phase === 0
+					? { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 900, status: { pendingQuestions: [{ id: 1, kind: "dialog", text: "{Monastery}\n\nWould you like to recruit Monks?" }] } }
+					: { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } };
+			case "status":
+				return { pendingQuestions: phase === 0 && calls.some(c => c.cmd === "move_hero")
+					? [{ id: 1, kind: "dialog", text: "{Monastery}\n\nWould you like to recruit Monks?" }]
+					: phase === 1 ? [{ id: 2, kind: "recruitment", object: 90, recruitable: [
+						{ level: 1, creature: "core:monk", name: "Monk", available: 10, cost: res({ gold: 100 }) },
+					] }] : [] };
+			case "answer_question":
+				phase++;
+				return {};
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		await playTurn({ tachka, king: new ScriptedKing(), journal, memoryDays: 5 }, newLoopState());
+		return { calls, journal };
+	}
+
+	it("buys as many as the gold allows for the visiting hero and closes the window", async () => {
+		const { calls } = await visit(["core:pikeman"], 450);
+		expect(calls.find(c => c.cmd === "recruit")?.args).toEqual({ object: 90, hero: 5, creature: "core:monk", count: 4 });
+		expect(calls.filter(c => c.cmd === "answer_question").map(c => c.args)).toEqual([{ id: 1, choice: 1 }, { id: 2, choice: 0 }]);
+	});
+
+	it("leaves a new creature alone when all seven slots hold other creatures, and says so", async () => {
+		const full = ["a", "b", "c", "d", "e", "f", "g"].map(x => `core:${x}`);
+		const { calls, journal } = await visit(full, 5000);
+		expect(calls.some(c => c.cmd === "recruit")).toBe(false);
+		expect(journal.tail(3, 1)[0]?.deviations).toContainEqual({ kind: "army_full", hero: 5, creature: "core:monk", available: 10 });
+	});
+});
+
+describe("playGame failures", () => {
+	it("ends the turn after a failed one and gives up after three in a row", async () => {
+		const calls: string[] = [];
+		const server = await startFakeBridge(cmd => {
+			calls.push(cmd);
+			if(cmd === "get_state")
+				throw new Error("state unavailable");
+			return cmd === "wait_for_turn" ? { yourTurn: true, battle: false } : cmd === "status" ? { pendingQuestions: [] } : {};
+		});
+		const tachka = new Tachka({ port: server.port });
+		const problems: string[] = [];
+		tachka.subscribe(e => e.type === "problem" && problems.push(e.text));
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+
+		const state = await playGame({ tachka, king: new ScriptedKing(), journal, memoryDays: 5 });
+		expect(state.turn).toBe(3);
+		expect(problems).toHaveLength(3);
+		expect(calls.filter(c => c === "end_turn")).toHaveLength(2);
 	});
 });

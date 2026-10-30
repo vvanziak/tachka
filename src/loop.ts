@@ -3,13 +3,13 @@ import { collectBlockers } from "./blockers.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parsePlan } from "./plan.js";
 import { defaultPlan } from "./defaultPlan.js";
-import { executePlan, type ExecutionReport } from "./executor.js";
+import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
 import { collectFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
 import { parseDecision, type Brief, type King } from "./king.js";
 import { collectSites, goTo, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
-import type { Resources } from "./state.js";
+import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
 import type { Tachka } from "./core.js";
 import type { AnswerContext, Question } from "./questions.js";
 import { nextTurn } from "./turn.js";
@@ -66,13 +66,58 @@ export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<b
 	}
 }
 
-async function answerQuestions(deps: LoopDeps, questions: Question[], deviations: unknown[], context: AnswerContext = {}): Promise<boolean> {
+/** Where a dialog came up: the hero on a mission, whether the mission may fight, and what the plan keeps back. */
+interface AnswerEnv extends AnswerContext {
+	hero?: number;
+	reserved?: Resources;
+}
+
+const ARMY_SLOTS = 7;
+
+/** Buys what the hero can pay for and carry at a dwelling on the map: best level first, within what the plan keeps back. */
+async function recruitAtDwelling(deps: LoopDeps, question: Question & { object?: number; recruitable?: Recruitable[] }, deviations: unknown[], env: AnswerEnv): Promise<void> {
+	if(env.hero === undefined || question.object === undefined)
+		return;
+	const bridge = deps.tachka.bridge;
+	const state = await bridge.call<{ resources: Resources; heroes: Hero[] }>("get_state", { radius: 0 });
+	const hero = state.heroes.find(h => h.id === env.hero);
+	if(!hero)
+		return;
+
+	let budget = Object.fromEntries(RESOURCES.map(r => [r, Math.max(0, state.resources[r] - (env.reserved?.[r] ?? 0))])) as Resources;
+	const army = new Set(hero.army.map(a => a.creature));
+	for(const entry of [...(question.recruitable ?? [])].sort((a, b) => b.level - a.level)) {
+		const count = Math.min(entry.available, ...RESOURCES.map(r => entry.cost[r] > 0 ? Math.floor(budget[r] / entry.cost[r]) : Infinity));
+		if(count <= 0)
+			continue;
+		// a new creature needs a free slot; an existing stack takes more of the same
+		if(!army.has(entry.creature) && army.size >= ARMY_SLOTS) {
+			deviations.push({ kind: "army_full", hero: env.hero, creature: entry.creature, available: count });
+			continue;
+		}
+		try {
+			await bridge.call("recruit", { object: question.object, hero: env.hero, creature: entry.creature, count });
+			army.add(entry.creature);
+			budget = Object.fromEntries(RESOURCES.map(r => [r, budget[r] - entry.cost[r] * count])) as Resources;
+		}
+		catch(e) {
+			if(!(e instanceof BridgeError))
+				throw e;
+			deviations.push({ kind: "rejected", action: `recruit ${count} ${entry.creature} at ${question.object}`, error: e.message });
+		}
+	}
+}
+
+/** Answers every open dialog. A dialog nobody has a rule for is answered anyway (no, if it can be declined) and reported. */
+async function answerQuestions(deps: LoopDeps, questions: Question[], deviations: unknown[], env: AnswerEnv = {}): Promise<boolean> {
 	for(const question of questions) {
-		const choice = deps.king.answer?.(question, context);
+		if(question.kind === "recruitment")
+			await recruitAtDwelling(deps, question, deviations, env);
+		let choice = question.kind === "recruitment" ? 0 : deps.king.answer?.(question, env);
 		if(choice === undefined) {
-			deps.tachka.publish({ type: "problem", text: `a dialog the king cannot answer is open: ${JSON.stringify(question).slice(0, 300)}` });
-			deviations.push({ kind: "unanswered_question", question });
-			return false;
+			choice = (question as { cancel?: boolean }).cancel ? 0 : 1;
+			deps.tachka.publish({ type: "problem", text: `no rule for this dialog, answered ${choice}: ${JSON.stringify(question).slice(0, 300)}` });
+			deviations.push({ kind: "unknown_dialog", question, answered: choice });
 		}
 		await deps.tachka.bridge.call("answer_question", { id: question.id, choice });
 	}
@@ -80,13 +125,13 @@ async function answerQuestions(deps: LoopDeps, questions: Question[], deviations
 }
 
 /** Answers dialogs until none is open: an answer can open the next one (a Tree of Knowledge level-up, for instance). */
-async function settleQuestions(deps: LoopDeps, deviations: unknown[], context: AnswerContext = {}): Promise<boolean> {
+async function settleQuestions(deps: LoopDeps, deviations: unknown[], env: AnswerEnv = {}): Promise<boolean> {
 	for(let round = 0; round < 8; round++) {
 		const status = await deps.tachka.bridge.call<{ pendingQuestions?: Question[] }>("status");
 		const open = status.pendingQuestions ?? [];
 		if(open.length === 0)
 			return true;
-		if(!await answerQuestions(deps, open, deviations, context))
+		if(!await answerQuestions(deps, open, deviations, env))
 			return false;
 	}
 	deviations.push({ kind: "questions_keep_coming" });
@@ -184,7 +229,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
 				if(outcome.stopped === "battle waiting for orders")
 					await bridge.call("battle_act", { action: "autofight" });
-				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight })) {
+				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight, hero: mission.hero, reserved: state.plan ? reservedTotal(state.plan.reserves) : undefined })) {
 					state.deviations = deviations;
 					return false;
 				}
@@ -232,18 +277,41 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	return true;
 }
 
-/** Plays until the turn limit, an unanswerable question, or the signal aborts. */
+/** After a failed turn: answer what is open, finish a battle, end the turn, so one failure does not freeze the game. */
+async function rescueTurn(deps: LoopDeps): Promise<void> {
+	await settleQuestions(deps, []);
+	await nextTurn(deps.tachka.bridge);
+}
+
+const MAX_FAILED_TURNS = 3;
+
+/** Plays until the turn limit, three failed turns in a row, or the signal aborts. */
 export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal; statePath?: string; resume?: boolean } = {}): Promise<LoopState> {
 	const state = options.statePath && options.resume ? loadLoopState(options.statePath) : newLoopState();
 	const first = state.turn;
+	let failures = 0;
 	while(state.turn - first < (options.maxTurns ?? Infinity)) {
 		if(!await awaitTurn(deps.tachka, options.signal))
 			break;
-		const more = await playTurn(deps, state);
+		try {
+			await playTurn(deps, state);
+			failures = 0;
+		}
+		catch(e) {
+			failures++;
+			deps.tachka.publish({ type: "problem", text: `turn failed (${failures}/${MAX_FAILED_TURNS}): ${e instanceof Error ? e.message : String(e)}` });
+			if(failures >= MAX_FAILED_TURNS)
+				break;
+			try {
+				await rescueTurn(deps);
+			}
+			catch(rescue) {
+				deps.tachka.publish({ type: "problem", text: `could not end the turn either: ${rescue instanceof Error ? rescue.message : String(rescue)}` });
+				await sleep(2_000);
+			}
+		}
 		if(options.statePath)
 			saveLoopState(options.statePath, state);
-		if(!more)
-			break;
 	}
 	return state;
 }

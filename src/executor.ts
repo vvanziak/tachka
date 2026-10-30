@@ -23,7 +23,7 @@ export interface ExecutionReport {
 /** The brief shows building keys without the mod prefix, so plans may name them either way. */
 const bare = (key: string) => key.replace(/^[^:]+:/, "");
 
-function reservedTotal(reserves: Plan["reserves"]): Resources {
+export function reservedTotal(reserves: Plan["reserves"]): Resources {
 	const total = Object.fromEntries(RESOURCES.map(r => [r, 0])) as Resources;
 	for(const reserve of reserves)
 		for(const r of RESOURCES)

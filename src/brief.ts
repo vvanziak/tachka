@@ -19,6 +19,8 @@ export function renderBrief(brief: Brief): string {
 		lines.push(`  built: ${t.buildings.map(short).join(", ")}`);
 		const options = t.options.map(o => `${short(o.building)}[${o.state}${o.missing.length ? " lacks " + o.missing.join("+") : ""}; ${money(o.cost)}]`);
 		lines.push(`  can build: ${options.join("; ") || "nothing"}`);
+		if(t.tavern.length)
+			lines.push(`  tavern (hire with \`hire\`, usually 2500 gold): ${t.tavern.map(h => `hero ${h.id} ${h.name} (${short(h.class)}; army ${h.army.map(a => a.count + " " + short(a.creature)).join(", ") || "none"})`).join("; ")}`);
 		lines.push(`  stock: ${t.recruitable.map(r => `${short(r.creature)}(lvl${r.level}) ${r.available} @${money(r.cost)}`).join("; ") || "none"}`);
 	}
 

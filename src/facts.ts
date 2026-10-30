@@ -1,9 +1,16 @@
-import type { BridgeClient } from "./bridge.js";
+import { BridgeError, type BridgeClient } from "./bridge.js";
 import { RESOURCES, type Buildable, type GameState, type Hero, type Recruitable, type Resources, type Town } from "./state.js";
 
 export interface BuildOption extends Buildable {
 	/** Resources the treasury lacks for this building right now. */
 	missing: Array<keyof Resources>;
+}
+
+export interface TavernHero {
+	id: number;
+	name: string;
+	class: string;
+	army: Array<{ creature: string; count: number }>;
 }
 
 export interface TownFacts {
@@ -16,6 +23,8 @@ export interface TownFacts {
 	buildings: string[];
 	options: BuildOption[];
 	recruitable: Recruitable[];
+	/** Heroes that can be hired here (empty without a tavern). */
+	tavern: TavernHero[];
 }
 
 export interface EconomyFacts {
@@ -45,6 +54,11 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 	const towns: TownFacts[] = [];
 	for(const town of state.towns) {
 		const options = await bridge.call<Buildable[]>("get_buildable", { town: town.id });
+		const tavern = town.buildings.includes("core:tavern") ? await bridge.call<TavernHero[]>("get_tavern", { town: town.id }).catch(e => {
+			if(e instanceof BridgeError)
+				return [];
+			throw e;
+		}) : [];
 		towns.push({
 			id: town.id,
 			name: town.name,
@@ -55,6 +69,7 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 			buildings: town.buildings,
 			options: options.map(o => ({ ...o, missing: missingResources(state.resources, o.cost) })),
 			recruitable: town.recruitable,
+			tavern,
 		});
 	}
 

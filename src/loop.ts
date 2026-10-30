@@ -165,10 +165,6 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 			deviations.push({ kind: "rejected", action, error: e.message });
 		}
 	};
-	for(const h of decision.hire)
-		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", h));
-	for(const m of decision.merge)
-		await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
 
 	let economy: ExecutionReport | undefined;
 	if(state.plan) {
@@ -201,6 +197,12 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		if(outcome.stopped === "guarded")
 			deviations.push({ kind: "guarded", hero: mission.hero, guard: outcome.guard, intent: mission.intent });
 	}
+
+	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
+	for(const h of decision.hire)
+		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", h));
+	for(const m of decision.merge)
+		await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
 
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,

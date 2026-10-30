@@ -3,7 +3,7 @@ import { Tachka } from "./core.js";
 import { Journal } from "./journal.js";
 import { ScriptedKing, type King } from "./king.js";
 import { LlmKing } from "./llmKing.js";
-import { playGame } from "./loop.js";
+import { playGame, waitForBridge } from "./loop.js";
 import { PLAYER_COLORS, portForPlayer, type PlayerColor } from "./protocol.js";
 import { jsonlRecorder } from "./recorder.js";
 import { startServer } from "./server.js";
@@ -39,6 +39,7 @@ const abort = new AbortController();
 process.on("SIGINT", () => abort.abort());
 
 try {
+	await waitForBridge(tachka, portForPlayer(player), abort.signal);
 	const state = await playGame({ tachka, king, journal, memoryDays: 7 }, { maxTurns, signal: abort.signal });
 	console.log(`stopped after ${state.turn} turns`);
 }

@@ -13,6 +13,7 @@ export type TachkaEvent =
 	| { type: "turn"; day: number; line: string; journal: unknown }
 	| { type: "king"; note: string; usage: KingUsage; total: KingUsage; ms: number }
 	| { type: "problem"; text: string }
+	| { type: "status"; text: string }
 	| { type: "paused" }
 	| { type: "resumed" };
 

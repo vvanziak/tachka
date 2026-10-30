@@ -114,6 +114,7 @@ function handle(e) {
       status("acting", true); break;
     case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
     case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
+    case "status": status(e.text, false); add("turn", esc(e.text)); break;
     case "problem": add("problem", esc(e.text)); break;
     case "paused": paused = true; $("pause").textContent = "Resume"; status("paused", false); break;
     case "resumed": paused = false; $("pause").textContent = "Pause"; break;

@@ -29,6 +29,28 @@ export interface LoopDeps {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/** Waits until the game has started and the bridge answers; the bridge only listens once the match begins. */
+export async function waitForBridge(tachka: Tachka, port: number, signal?: AbortSignal): Promise<boolean> {
+	let told = false;
+	while(!signal?.aborted) {
+		try {
+			await tachka.bridge.call("ping", {}, 5_000);
+			tachka.publish({ type: "status", text: "connected to the game" });
+			return true;
+		}
+		catch(e) {
+			if(!(e as NodeJS.ErrnoException).code && !(e instanceof Error && e.message.startsWith("no reply")))
+				throw e;
+			if(!told) {
+				tachka.publish({ type: "status", text: `waiting for the game (nothing listens on port ${port} yet)` });
+				told = true;
+			}
+			await sleep(2_000);
+		}
+	}
+	return false;
+}
+
 /** Blocks until it is our turn; battles that need orders are fought by BattleAI meanwhile. */
 export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<boolean> {
 	for(;;) {

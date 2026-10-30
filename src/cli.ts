@@ -1,6 +1,12 @@
 import readline from "node:readline";
 import { Tachka } from "./core.js";
-import { economyRoutine } from "./routines.js";
+import { readFileSync } from "node:fs";
+import { defaultPlan } from "./defaultPlan.js";
+import { executePlan } from "./executor.js";
+import { collectFacts } from "./facts.js";
+import { parsePlan, type Plan } from "./plan.js";
+import type { Resources } from "./state.js";
+import { nextTurn } from "./turn.js";
 import { jsonlRecorder } from "./recorder.js";
 import { PLAYER_COLORS, portForPlayer, type PlayerColor } from "./protocol.js";
 
@@ -38,6 +44,8 @@ function show(value: unknown): string {
 
 const { port, record } = parseArgs(process.argv.slice(2));
 const tachka = new Tachka({ port, onExchange: record ? jsonlRecorder(record) : undefined });
+let plan: Plan | undefined;
+let previousEnd: Resources | undefined;
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "you> " });
 
 tachka.subscribe(event => {
@@ -47,7 +55,7 @@ tachka.subscribe(event => {
 		console.log(`[${event.type}]`);
 });
 
-console.log(`Tachka console on port ${port}. Plain text talks to Tachka. /call <cmd> [json], /economy, /pause, /resume, /quit`);
+console.log(`Tachka console on port ${port}. Plain text talks to Tachka. /call <cmd> [json], /facts, /default, /plan <file>, /run, /next, /pause, /resume, /quit`);
 rl.prompt();
 
 rl.on("line", async line => {
@@ -59,8 +67,27 @@ rl.on("line", async line => {
 			tachka.pause();
 		else if(text === "/resume")
 			tachka.resume();
-		else if(text === "/economy")
-			console.log(show(await economyRoutine(tachka.bridge)));
+		else if(text === "/facts")
+			console.log(show(await collectFacts(tachka.bridge, previousEnd)));
+		else if(text === "/default") {
+			plan = defaultPlan(await collectFacts(tachka.bridge, previousEnd));
+			console.log(show(plan));
+		}
+		else if(text.startsWith("/plan ")) {
+			plan = parsePlan(JSON.parse(readFileSync(text.slice(6).trim(), "utf8")));
+			console.log("plan loaded");
+		}
+		else if(text === "/run") {
+			if(!plan)
+				throw new Error("no plan: use /plan <file.json> or /default");
+			const report = await executePlan(tachka.bridge, plan, await collectFacts(tachka.bridge, previousEnd));
+			previousEnd = report.treasuryAfter;
+			console.log(show(report));
+		}
+		else if(text === "/next") {
+			await nextTurn(tachka.bridge);
+			console.log("your turn");
+		}
 		else if(text.startsWith("/call ")) {
 			const [cmd, ...rest] = text.slice(6).trim().split(/\s+/);
 			const args = rest.length ? JSON.parse(rest.join(" ")) : {};

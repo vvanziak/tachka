@@ -19,6 +19,8 @@ export interface LoopState {
 	previousEnd: Resources | undefined;
 	deviations: unknown[];
 	turn: number;
+	/** Why the loop stopped: "game over", "connection lost", "failed turns", or undefined while running or when aborted. */
+	ended?: string;
 }
 
 export interface LoopDeps {
@@ -54,16 +56,24 @@ export async function waitForBridge(tachka: Tachka, port: number, signal?: Abort
 }
 
 /** Blocks until it is our turn; battles that need orders are fought by BattleAI meanwhile. */
-export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<boolean> {
+export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<"turn" | "over" | "aborted"> {
 	for(;;) {
 		if(signal?.aborted)
-			return false;
-		const wait = await tachka.bridge.call<{ yourTurn: boolean; battle: boolean }>("wait_for_turn", { timeoutMs: 15_000 }, 60_000);
+			return "aborted";
+		const wait = await tachka.bridge.call<{ yourTurn: boolean; battle: boolean; gameOver?: boolean }>("wait_for_turn", { timeoutMs: 15_000 }, 60_000);
+		if(wait.gameOver)
+			return "over";
 		if(wait.yourTurn)
-			return true;
+			return "turn";
 		if(wait.battle)
 			await tachka.bridge.call("battle_act", { action: "autofight" });
 	}
+}
+
+/** The game ended or the client was closed: the connection is gone, which is not a failure of the turn. */
+export function connectionLost(e: unknown): boolean {
+	const code = (e as NodeJS.ErrnoException).code;
+	return code === "ECONNRESET" || code === "ECONNREFUSED" || code === "EPIPE" || (e instanceof Error && e.message.includes("closed the connection"));
 }
 
 /** Where a dialog came up: the hero on a mission, whether the mission may fight, and what the plan keeps back. */
@@ -285,27 +295,42 @@ async function rescueTurn(deps: LoopDeps): Promise<void> {
 
 const MAX_FAILED_TURNS = 3;
 
-/** Plays until the turn limit, three failed turns in a row, or the signal aborts. */
+/** Plays until the turn limit, the end of the game, a lost connection, three failed turns in a row, or the signal aborts. */
 export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal; statePath?: string; resume?: boolean } = {}): Promise<LoopState> {
 	const state = options.statePath && options.resume ? loadLoopState(options.statePath) : newLoopState();
 	const first = state.turn;
 	let failures = 0;
 	while(state.turn - first < (options.maxTurns ?? Infinity)) {
-		if(!await awaitTurn(deps.tachka, options.signal))
-			break;
 		try {
+			const next = await awaitTurn(deps.tachka, options.signal);
+			if(next === "over") {
+				state.ended = "game over";
+				break;
+			}
+			if(next === "aborted")
+				break;
 			await playTurn(deps, state);
 			failures = 0;
 		}
 		catch(e) {
+			if(connectionLost(e)) {
+				state.ended = "connection lost";
+				break;
+			}
 			failures++;
 			deps.tachka.publish({ type: "problem", text: `turn failed (${failures}/${MAX_FAILED_TURNS}): ${e instanceof Error ? e.message : String(e)}` });
-			if(failures >= MAX_FAILED_TURNS)
+			if(failures >= MAX_FAILED_TURNS) {
+				state.ended = "failed turns";
 				break;
+			}
 			try {
 				await rescueTurn(deps);
 			}
 			catch(rescue) {
+				if(connectionLost(rescue)) {
+					state.ended = "connection lost";
+					break;
+				}
 				deps.tachka.publish({ type: "problem", text: `could not end the turn either: ${rescue instanceof Error ? rescue.message : String(rescue)}` });
 				await sleep(2_000);
 			}
@@ -313,5 +338,7 @@ export async function playGame(deps: LoopDeps, options: { maxTurns?: number; sig
 		if(options.statePath)
 			saveLoopState(options.statePath, state);
 	}
+	if(options.statePath)
+		saveLoopState(options.statePath, state);
 	return state;
 }

@@ -4,7 +4,10 @@ import { Journal } from "./journal.js";
 import { ScriptedKing, type King } from "./king.js";
 import { LlmKing } from "./llmKing.js";
 import { playGame, waitForBridge } from "./loop.js";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { collectFinale } from "./finale.js";
+import { Situation } from "./situation.js";
+import { Talker } from "./talker.js";
 import { PLAYER_COLORS, portForPlayer, type PlayerColor } from "./protocol.js";
 import { jsonlRecorder } from "./recorder.js";
 import { startServer } from "./server.js";
@@ -41,6 +44,11 @@ else {
 	console.log(`king: ${brain.name}`);
 }
 
+// the talker answers at any moment; it uses the king's model, or the claude CLI when the king is a script
+const talkBrain: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--chat-model") ?? "sonnet");
+const situation = new Situation(tachka, journal);
+new Talker(tachka, talkBrain, () => situation.describe(), `${dir}/chat.jsonl`);
+
 const ui = startServer(tachka, uiPort);
 if(resume)
 	for(const e of journal.tail(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER).slice(-25)) {
@@ -66,7 +74,15 @@ for(const signal of ["SIGINT", "SIGTERM"] as const)
 try {
 	await waitForBridge(tachka, portForPlayer(player), abort.signal);
 	const state = await playGame({ tachka, king, journal, memoryDays: 7 }, { maxTurns, signal: abort.signal, statePath: `${dir}/state.json`, resume });
-	console.log(`stopped after ${state.turn} turns`);
+	console.log(`stopped after ${state.turn} turns${state.ended ? ` (${state.ended})` : ""}`);
+	if(state.ended === "game over" || state.ended === "connection lost") {
+		tachka.publish({ type: "status", text: state.ended === "game over" ? "the game is over" : "the game was closed" });
+		const gameOver = await tachka.bridge.call<{ gameOver?: unknown }>("status", {}, 5_000).then(r => r.gameOver).catch(() => undefined);
+		const final = { ...await collectFinale(tachka.bridge, gameOver).catch(() => ({ gameOver })), lastKnownFacts: situation.lastFacts };
+		writeFileSync(`${dir}/final.json`, JSON.stringify(final, null, 1));
+		tachka.publish({ type: "final", final });
+		tachka.publish({ type: "chat", from: "king", text: state.ended === "game over" ? "The game is over. I'm still here: ask me anything about it." : "The game was closed. I'm still here, but I can only talk about what I remember from it." });
+	}
 }
 catch(e) {
 	const text = e instanceof Error ? e.message : String(e);

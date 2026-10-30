@@ -14,6 +14,8 @@ export type TachkaEvent =
 	| { type: "king"; note: string; usage: KingUsage; total: KingUsage; ms: number }
 	| { type: "problem"; text: string }
 	| { type: "status"; text: string }
+	| { type: "typing"; on: boolean }
+	| { type: "final"; final: unknown }
 	| { type: "paused" }
 	| { type: "resumed" };
 
@@ -45,6 +47,11 @@ export class Tachka {
 	say(text: string): void {
 		this.inbox.push(text);
 		this.publish({ type: "chat", from: "human", text });
+	}
+
+	/** A line for the king's next brief that is not shown in the chat (what the talker already told the human). */
+	note(text: string): void {
+		this.inbox.push(text);
 	}
 
 	drainInbox(): string[] {

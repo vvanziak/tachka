@@ -292,3 +292,49 @@ describe("playGame failures", () => {
 		expect(calls.filter(c => c === "end_turn")).toHaveLength(2);
 	});
 });
+
+describe("the end of the game", () => {
+	const quietKing = new ScriptedKing();
+	const newJournal = () => new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+
+	it("stops cleanly when the bridge reports game over, without a problem message", async () => {
+		const server = await startFakeBridge(cmd => cmd === "wait_for_turn" ? { yourTurn: false, battle: false, gameOver: true } : {});
+		const tachka = new Tachka({ port: server.port });
+		const problems: string[] = [];
+		tachka.subscribe(e => e.type === "problem" && problems.push(e.text));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const state = await playGame({ tachka, king: quietKing, journal: newJournal(), memoryDays: 5 });
+		expect(state.ended).toBe("game over");
+		expect(problems).toEqual([]);
+	});
+
+	it("treats a closed client as the end, not as three failed turns", async () => {
+		const server = await startFakeBridge(() => ({}));
+		await server.close();
+		const tachka = new Tachka({ port: server.port });
+		const problems: string[] = [];
+		tachka.subscribe(e => e.type === "problem" && problems.push(e.text));
+		const state = await playGame({ tachka, king: quietKing, journal: newJournal(), memoryDays: 5 });
+		expect(state.ended).toBe("connection lost");
+		expect(problems).toEqual([]);
+	});
+});
+
+describe("Talker", () => {
+	it("answers a human message at once, shows typing, and leaves a note for the king", async () => {
+		const { Talker } = await import("../src/talker.js");
+		const brain = {
+			name: "fake",
+			complete: async () => { throw new Error("not used"); },
+			say: async (_system: string, user: string) => ({ text: user.includes("Spider Hill") ? "Heading there next." : "?", usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 } }),
+		};
+		const tachka = new Tachka({ port: 1 });
+		const events: string[] = [];
+		tachka.subscribe(e => events.push(e.type === "chat" ? `${e.from}:${e.text}` : e.type === "typing" ? `typing:${e.on}` : e.type));
+		new Talker(tachka, brain, () => "Phase: waiting for the other players' turn.");
+		tachka.say("what about Spider Hill?");
+		await new Promise(resolve => setTimeout(resolve, 20));
+		expect(events).toEqual(["human:what about Spider Hill?", "typing:true", "king:Heading there next.", "typing:false"]);
+		expect(tachka.drainInbox()).toEqual(["what about Spider Hill?", "(already answered in chat: Heading there next.)"]);
+	});
+});

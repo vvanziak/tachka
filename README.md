@@ -15,7 +15,9 @@ Name: what we called the computer player 25 years ago (тачка).
    ```sh
    cd ~/Projects/tachka && npm install && npm run play -- --player blue
    ```
-3. Open http://127.0.0.1:8787. Write to the king in the box; it reads your messages at its next decision and answers in the chat. Pause stops it before its next decision.
+3. Open http://127.0.0.1:8787. Write in the box at any moment, on your turn or hers: a separate talker answers right away from the same facts and journal (a second model call, so it works while the king is thinking or waiting). Everything you write also reaches the king at its next decision, together with what the talker already answered. Pause stops the king before its next decision; chat keeps working.
+
+When the game ends (or the client is closed) Tachka stays up: it saves `final.json` (the bridge's last answers plus the last facts it saw), shows a Game over card, and you can talk the game over with it.
 
 Restart without losing the thread: `npm run play -- --player blue --resume` continues the latest game folder (journal, economy plan, turn counter) and shows its last turns on the page. Without `--resume` a new folder starts empty.
 

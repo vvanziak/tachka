@@ -76,6 +76,7 @@ pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size
     <section><h2>Towns</h2><div id="towns" class="muted"></div></section>
     <section><h2>Blocked</h2><div id="blockers" class="muted"></div></section>
     <section><h2>Plan</h2><div id="plan" class="muted"></div></section>
+    <section id="finalbox" hidden><h2>Game over</h2><div id="final"></div></section>
   </aside>
 </main>
 <script>
@@ -115,6 +116,18 @@ function handle(e) {
     case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
     case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
     case "status": status(e.text, false); add("turn", esc(e.text)); break;
+    case "typing": {
+      let el = $("typing");
+      if (e.on && !el) { add("thought", "Tachka is typing…"); feed.lastChild.id = "typing"; }
+      if (!e.on && el) el.remove();
+      break;
+    }
+    case "final": {
+      const g = e.final.gameOver || {};
+      $("finalbox").hidden = false;
+      $("final").innerHTML = `<div>${g.won ? "Tachka won." : g.lost ? "Tachka lost." : "The game ended."} <span class="muted">${esc(g.text || "")}</span></div><details><summary>final report</summary><pre>${esc(JSON.stringify(e.final, null, 1))}</pre></details>`;
+      status("game over: talk to me", false); break;
+    }
     case "problem": add("problem", esc(e.text)); break;
     case "paused": paused = true; $("pause").textContent = "Resume"; status("paused", false); break;
     case "resumed": paused = false; $("pause").textContent = "Pause"; break;

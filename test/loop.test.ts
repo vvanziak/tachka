@@ -144,3 +144,43 @@ describe("loop state", () => {
 		expect(loadLoopState(join(tmpdir(), "does-not-exist.json")).turn).toBe(0);
 	});
 });
+
+describe("a fight during a mission", () => {
+	it("is fought out and the walk resumes before the turn ends", async () => {
+		const calls: string[] = [];
+		let fought = false;
+		const server = await startFakeBridge((cmd, args: any) => {
+			calls.push(cmd);
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 100 }), towns: [],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 1500, army: [], primarySkills: {} }],
+				};
+			case "targets":
+				return [site(62, "mine", "sawmill", "Sawmill", 0)];
+			case "status":
+				return { pendingQuestions: [] };
+			case "move_hero":
+				return fought
+					? { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } }
+					: { reached: false, stopped: "battle waiting for orders", pos: { x: 3, y: 3, z: 0 }, movement: 900, status: { pendingQuestions: [] } };
+			case "battle_act":
+				fought = true;
+				return { battleOver: true };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+
+		await playTurn({ tachka, king: new ScriptedKing(), journal, memoryDays: 5 }, newLoopState());
+		expect(calls.indexOf("battle_act")).toBeGreaterThan(calls.indexOf("move_hero"));
+		expect(calls.indexOf("battle_act")).toBeLessThan(calls.indexOf("end_turn"));
+		expect(calls.filter(c => c === "move_hero")).toHaveLength(2);
+	});
+});

@@ -179,7 +179,11 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		let outcome: MoveOutcome;
 		try {
 			outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
-			for(let resume = 0; resume < 4 && outcome.pendingQuestions.length > 0; resume++) {
+			const interrupted = (o: MoveOutcome) => o.pendingQuestions.length > 0 || o.stopped === "battle waiting for orders";
+			for(let resume = 0; resume < 4 && interrupted(outcome); resume++) {
+				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
+				if(outcome.stopped === "battle waiting for orders")
+					await bridge.call("battle_act", { action: "autofight" });
 				if(!await settleQuestions(deps, deviations)) {
 					state.deviations = deviations;
 					return false;

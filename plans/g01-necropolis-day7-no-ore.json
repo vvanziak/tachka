@@ -1,0 +1,20 @@
+{
+  "madeOnDay": 7,
+  "reviewByDay": 10,
+  "note": "Necropolis, day 7: 5440 gold idle, ore 0, wood 19. Nearly every remaining building needs ore, so the plan builds the marketplace (no ore) to be able to trade and waits on nothing else. The executor will report ore as blocked; the real answer is a hero sent to an ore source, or the second hero bought, which this format cannot say. Whether trading gold for ore is worth it needs the market rate, which the facts do not carry yet.",
+  "reserves": [],
+  "towns": [
+    {
+      "town": 0,
+      "role": "main",
+      "build": [
+        { "building": "core:marketplace" },
+        { "building": "core:mageGuild2", "onShortage": "skip" },
+        { "building": "core:dwellingLvl5", "onShortage": "skip" },
+        { "building": "core:citadel", "onShortage": "skip" },
+        { "building": "core:castle", "onShortage": "skip" }
+      ],
+      "recruit": { "mode": "all" }
+    }
+  ]
+}

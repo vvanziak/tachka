@@ -1,0 +1,20 @@
+{
+  "madeOnDay": 1,
+  "reviewByDay": 8,
+  "note": "Rampart, 10000 gold, harder start: income first. City Hall now (Capitol pays back in about 2.5 turns, per the human), citadel and the pegasus dwelling next. Recruit only the shooters and the dwarves, keep centaur gold for the next build. Guess, not a recorded human decision: the game record shows City Hall plus recruiting every level. Not expressible: leave the town with the army merged under the ranger and take ore, the Ore Pit and the chest first.",
+  "reserves": [{ "label": "dwellings", "amount": { "gold": 2500 } }],
+  "towns": [
+    {
+      "town": 378,
+      "role": "main",
+      "build": [
+        { "building": "core:cityHall" },
+        { "building": "core:dwellingLvl4", "usesReserve": "dwellings" },
+        { "building": "core:citadel", "onShortage": "skip" },
+        { "building": "core:castle" },
+        { "building": "core:capitol" }
+      ],
+      "recruit": { "mode": "levels", "levels": [1, 2] }
+    }
+  ]
+}

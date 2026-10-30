@@ -1,0 +1,27 @@
+{
+  "madeOnDay": 1,
+  "reviewByDay": 8,
+  "note": "Dungeon, 20000 gold, easy: money is not the constraint, dwellings are. Town Hall first for income, then every dwelling the wood/ore allow; sulfur is the main resource, so 10 stay untouched until the Black Dragon dwelling. Not expressible here: buy a second hero, merge troglodytes and all army under the main hero, main hero hunts chests and weekly creatures, second hero flags mines and follows.",
+  "reserves": [{ "label": "dragons", "amount": { "sulfur": 10 } }],
+  "towns": [
+    {
+      "town": 0,
+      "role": "main",
+      "build": [
+        { "building": "core:townHall" },
+        { "building": "core:dwellingLvl2", "onShortage": "skip" },
+        { "building": "core:dwellingLvl3", "onShortage": "skip" },
+        { "building": "core:dwellingLvl4", "onShortage": "skip" },
+        { "building": "core:mageGuild1", "onShortage": "skip" },
+        { "building": "core:dwellingLvl5", "onShortage": "skip" },
+        { "building": "core:dwellingLvl6" },
+        { "building": "core:cityHall" },
+        { "building": "core:citadel", "onShortage": "skip" },
+        { "building": "core:castle", "onShortage": "skip" },
+        { "building": "core:dwellingLvl7", "usesReserve": "dragons" },
+        { "building": "core:capitol" }
+      ],
+      "recruit": { "mode": "all" }
+    }
+  ]
+}

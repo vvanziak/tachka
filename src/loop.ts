@@ -5,7 +5,7 @@ import { executePlan, type ExecutionReport } from "./executor.js";
 import { collectFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
 import { parseDecision, type Brief, type King } from "./king.js";
-import { collectSites, goTo, type Site } from "./missions.js";
+import { collectSites, goTo, type MoveOutcome, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import type { Resources } from "./state.js";
 import type { Tachka } from "./core.js";
@@ -77,6 +77,20 @@ async function answerQuestions(deps: LoopDeps, questions: Question[], deviations
 	return true;
 }
 
+/** Answers dialogs until none is open: an answer can open the next one (a Tree of Knowledge level-up, for instance). */
+async function settleQuestions(deps: LoopDeps, deviations: unknown[]): Promise<boolean> {
+	for(let round = 0; round < 8; round++) {
+		const status = await deps.tachka.bridge.call<{ pendingQuestions?: Question[] }>("status");
+		const open = status.pendingQuestions ?? [];
+		if(open.length === 0)
+			return true;
+		if(!await answerQuestions(deps, open, deviations))
+			return false;
+	}
+	deviations.push({ kind: "questions_keep_coming" });
+	return true;
+}
+
 export function newLoopState(): LoopState {
 	return { plan: undefined, previousEnd: undefined, deviations: [], turn: 0 };
 }
@@ -100,9 +114,8 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	while(tachka.isPaused)
 		await sleep(300);
 
-	const open = await bridge.call<{ pendingQuestions?: Question[] }>("status");
 	const carried: unknown[] = [];
-	if(!await answerQuestions(deps, open.pendingQuestions ?? [], carried)) {
+	if(!await settleQuestions(deps, carried)) {
 		state.deviations = carried;
 		return false;
 	}
@@ -153,13 +166,22 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	const moves: JournalEntry["moves"] = [];
 	for(const mission of decision.missions) {
 		// a dialog (chest, level-up) interrupts the walk; after answering it the same mission resumes
-		let outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
-		for(let resume = 0; resume < 4 && outcome.pendingQuestions.length > 0; resume++) {
-			if(!await answerQuestions(deps, outcome.pendingQuestions as Question[], deviations)) {
-				state.deviations = deviations;
-				return false;
-			}
+		let outcome: MoveOutcome;
+		try {
 			outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
+			for(let resume = 0; resume < 4 && outcome.pendingQuestions.length > 0; resume++) {
+				if(!await settleQuestions(deps, deviations)) {
+					state.deviations = deviations;
+					return false;
+				}
+				outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
+			}
+		}
+		catch(e) {
+			if(!(e instanceof BridgeError))
+				throw e;
+			deviations.push({ kind: "rejected", action: `move hero ${mission.hero}`, error: e.message });
+			continue;
 		}
 		moves.push({ hero: mission.hero, target: mission.target, intent: mission.intent, reached: outcome.reached || outcome.visited === true, stopped: outcome.stopped });
 		if(outcome.stopped === "guarded")

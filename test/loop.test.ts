@@ -87,3 +87,47 @@ describe("playTurn", () => {
 		expect(entry.moves).toEqual([{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "Sawmill: wood for a blocked building", reached: true }]);
 	});
 });
+
+describe("dialogs during a mission", () => {
+	it("answers a dialog and the level-up it opens, then resumes the walk", async () => {
+		const answered: number[] = [];
+		let moves = 0;
+		const server = await startFakeBridge((cmd, args: any) => {
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 100 }), towns: [],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 1500, army: [], primarySkills: {} }],
+				};
+			case "targets":
+				return [site(62, "treeOfKnowledge", "", "Tree of Knowledge", 0)];
+			case "status":
+				return { pendingQuestions: [[{ id: 23, kind: "dialog" }], [{ id: 24, kind: "level_up", choices: ["core:necromancy", "core:wisdom"] }], []][Math.min(answered.length, 2)] };
+			case "end_turn":
+				return {};
+			case "move_hero":
+				if(answered.length === 0)
+					return { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 900, status: { pendingQuestions: [{ id: 23, kind: "dialog" }] } };
+				if(answered.length < 2)
+					throw Object.assign(new Error("answer pending question 24 first (answer_question)"), { name: "BridgeError" });
+				moves++;
+				return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } };
+			case "answer_question":
+				answered.push(args.id);
+				return {};
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+
+		const king = new ScriptedKing();
+		expect(await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState())).toBe(true);
+		expect(answered).toEqual([23, 24]);
+		expect(moves).toBe(1);
+	});
+});

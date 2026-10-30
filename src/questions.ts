@@ -19,5 +19,8 @@ export function defaultAnswer(question: Question): number | undefined {
 	}
 	if(question.kind === "dialog")
 		return 1;
+	// closing a dwelling's recruitment window or a hero exchange; the king recruits through the plan
+	if(question.kind === "recruitment" || question.kind === "hero_exchange")
+		return 0;
 	return undefined;
 }

@@ -1,5 +1,6 @@
 import readline from "node:readline";
 import { Tachka } from "./core.js";
+import { economyRoutine } from "./routines.js";
 import { jsonlRecorder } from "./recorder.js";
 import { PLAYER_COLORS, portForPlayer, type PlayerColor } from "./protocol.js";
 
@@ -46,7 +47,7 @@ tachka.subscribe(event => {
 		console.log(`[${event.type}]`);
 });
 
-console.log(`Tachka console on port ${port}. Plain text talks to Tachka. /call <cmd> [json], /pause, /resume, /quit`);
+console.log(`Tachka console on port ${port}. Plain text talks to Tachka. /call <cmd> [json], /economy, /pause, /resume, /quit`);
 rl.prompt();
 
 rl.on("line", async line => {
@@ -58,6 +59,8 @@ rl.on("line", async line => {
 			tachka.pause();
 		else if(text === "/resume")
 			tachka.resume();
+		else if(text === "/economy")
+			console.log(show(await economyRoutine(tachka.bridge)));
 		else if(text.startsWith("/call ")) {
 			const [cmd, ...rest] = text.slice(6).trim().split(/\s+/);
 			const args = rest.length ? JSON.parse(rest.join(" ")) : {};

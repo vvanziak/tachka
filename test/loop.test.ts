@@ -7,6 +7,7 @@ import { Tachka } from "../src/core.js";
 import type { EconomyFacts } from "../src/facts.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
+import { nextTurn } from "../src/turn.js";
 import { loadLoopState, newLoopState, playTurn, saveLoopState } from "../src/loop.js";
 import type { Site } from "../src/missions.js";
 import type { Resources } from "../src/state.js";
@@ -182,5 +183,24 @@ describe("a fight during a mission", () => {
 		expect(calls.indexOf("battle_act")).toBeGreaterThan(calls.indexOf("move_hero"));
 		expect(calls.indexOf("battle_act")).toBeLessThan(calls.indexOf("end_turn"));
 		expect(calls.filter(c => c === "move_hero")).toHaveLength(2);
+	});
+});
+
+describe("nextTurn", () => {
+	it("fights a running battle when end_turn is refused, then ends the turn", async () => {
+		const calls: string[] = [];
+		let battle = true;
+		const server = await startFakeBridge(cmd => {
+			calls.push(cmd);
+			if(cmd === "end_turn" && battle)
+				throw new Error("a battle is in progress: finish it first (battle_act)");
+			if(cmd === "battle_act")
+				battle = false;
+			return cmd === "wait_for_turn" ? { yourTurn: true, battle: false } : {};
+		});
+		const tachka = new Tachka({ port: server.port });
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		await nextTurn(tachka.bridge);
+		expect(calls).toEqual(["end_turn", "battle_act", "end_turn", "wait_for_turn"]);
 	});
 });

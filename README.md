@@ -17,6 +17,8 @@ Name: what we called the computer player 25 years ago (тачка).
    ```
 3. Open http://127.0.0.1:8787. Write to the king in the box; it reads your messages at its next decision and answers in the chat. Pause stops it before its next decision.
 
+Restart without losing the thread: `npm run play -- --player blue --resume` continues the latest game folder (journal, economy plan, turn counter) and shows its last turns on the page. Without `--resume` a new folder starts empty.
+
 Options: `--king cli|api|scripted` (scripted needs no model), `--model sonnet` (CLI), `--turns N`, `--ui PORT`, `--out DIR` (default `logs/<time>`: `exchanges.jsonl` is every bridge request and reply, `journal.jsonl` is one line per turn).
 
 A model failure never stops the game: the page shows the problem, the economy plan keeps running and heroes stand still until the next turn.

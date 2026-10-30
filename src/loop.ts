@@ -1,5 +1,7 @@
 import { BridgeError } from "./bridge.js";
 import { collectBlockers } from "./blockers.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { parsePlan } from "./plan.js";
 import { defaultPlan } from "./defaultPlan.js";
 import { executePlan, type ExecutionReport } from "./executor.js";
 import { collectFacts } from "./facts.js";
@@ -93,6 +95,18 @@ async function settleQuestions(deps: LoopDeps, deviations: unknown[]): Promise<b
 
 export function newLoopState(): LoopState {
 	return { plan: undefined, previousEnd: undefined, deviations: [], turn: 0 };
+}
+
+/** What must outlive a restart besides the journal: the plan, the treasury at the end of our last turn, the turn counter. */
+export function saveLoopState(path: string, state: LoopState): void {
+	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn }));
+}
+
+export function loadLoopState(path: string): LoopState {
+	if(!existsSync(path))
+		return newLoopState();
+	const saved = JSON.parse(readFileSync(path, "utf8"));
+	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0 };
 }
 
 function mergeSites(perHero: Record<number, Site[]>): Site[] {
@@ -203,12 +217,16 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 }
 
 /** Plays until the turn limit, an unanswerable question, or the signal aborts. */
-export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal } = {}): Promise<LoopState> {
-	const state = newLoopState();
-	while(state.turn < (options.maxTurns ?? Infinity)) {
+export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal; statePath?: string; resume?: boolean } = {}): Promise<LoopState> {
+	const state = options.statePath && options.resume ? loadLoopState(options.statePath) : newLoopState();
+	const first = state.turn;
+	while(state.turn - first < (options.maxTurns ?? Infinity)) {
 		if(!await awaitTurn(deps.tachka, options.signal))
 			break;
-		if(!await playTurn(deps, state))
+		const more = await playTurn(deps, state);
+		if(options.statePath)
+			saveLoopState(options.statePath, state);
+		if(!more)
 			break;
 	}
 	return state;

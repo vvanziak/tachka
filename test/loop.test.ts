@@ -7,7 +7,7 @@ import { Tachka } from "../src/core.js";
 import type { EconomyFacts } from "../src/facts.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
-import { newLoopState, playTurn } from "../src/loop.js";
+import { loadLoopState, newLoopState, playTurn, saveLoopState } from "../src/loop.js";
 import type { Site } from "../src/missions.js";
 import type { Resources } from "../src/state.js";
 import { startFakeBridge } from "./fakeBridge.js";
@@ -129,5 +129,18 @@ describe("dialogs during a mission", () => {
 		expect(await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState())).toBe(true);
 		expect(answered).toEqual([23, 24]);
 		expect(moves).toBe(1);
+	});
+});
+
+describe("loop state", () => {
+	it("survives a restart: plan, treasury and turn counter", () => {
+		const path = join(mkdtempSync(join(tmpdir(), "tachka-")), "state.json");
+		const state = newLoopState();
+		state.turn = 12;
+		state.previousEnd = res({ gold: 900 });
+		state.plan = { madeOnDay: 3, reviewByDay: 9, reserves: [], towns: [{ town: 1, build: [{ building: "core:tavern", onShortage: "wait" }], recruit: { mode: "all" } }] };
+		saveLoopState(path, state);
+		expect(loadLoopState(path)).toEqual({ ...state, deviations: [] });
+		expect(loadLoopState(join(tmpdir(), "does-not-exist.json")).turn).toBe(0);
 	});
 });

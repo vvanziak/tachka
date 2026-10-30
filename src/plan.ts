@@ -28,7 +28,7 @@ export const planSchema = z.object({
 	madeOnDay: z.number().int(),
 	reviewByDay: z.number().int(),
 	note: z.string().optional(),
-	/** Withheld from recruiting; builds may spend it. A step's `usesReserve` releases it once built. */
+	/** Withheld from every spend except the build step that names it in `usesReserve`, which releases it once built. */
 	reserves: z.array(z.object({ label: z.string(), amount: amount }).strict()).default([]),
 	/** Towns in priority order: earlier towns draw on the shared treasury first. */
 	towns: z.array(townPlan),

@@ -65,6 +65,14 @@ describe("executePlan", () => {
 		expect(building.report.recruited).toEqual([{ town: 1, creature: "core:imp", count: 10 }]);
 	});
 
+	it("does not let another build spend a reserved amount", async () => {
+		const t = town(1, { options: [option("core:tavern", { gold: 500 }), option("core:dwellingLvl7", { gold: 3000, sulfur: 10 })] });
+		const plan = (build: object[]) => ({ madeOnDay: 1, reviewByDay: 9, reserves: [{ label: "dragons", amount: { gold: 3000, sulfur: 10 } }], towns: [{ town: 1, build }] });
+		const f = facts([t], 3200, { sulfur: 10 });
+		expect((await run(plan([{ building: "core:tavern", onShortage: "skip" }]), f)).report.built).toEqual([]);
+		expect((await run(plan([{ building: "core:dwellingLvl7", usesReserve: "dragons" }]), f)).report.built).toEqual([{ town: 1, building: "core:dwellingLvl7" }]);
+	});
+
 	it("recruits only the listed levels, and nothing in none mode", async () => {
 		const t = town(1, { recruitable: [stock(0, "core:imp", 10, 50), stock(1, "core:gog", 10, 100)] });
 		const plan = (recruit: object) => ({ madeOnDay: 1, reviewByDay: 9, towns: [{ town: 1, recruit }] });

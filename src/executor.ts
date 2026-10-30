@@ -44,7 +44,7 @@ async function attempt(report: ExecutionReport, town: number, action: string, ru
 	}
 }
 
-async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, treasury: Resources, report: ExecutionReport, released: Set<string>): Promise<Resources> {
+async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, treasury: Resources, reserves: Plan["reserves"], report: ExecutionReport, released: Set<string>): Promise<Resources> {
 	if(town.builtThisTurn)
 		return treasury;
 
@@ -55,7 +55,11 @@ async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, 
 
 		if(option.state !== "allowed" && option.state !== "no_resources")
 			continue;
-		if(affordable(treasury, option.cost)) {
+
+		// a reserve protects its amount from every spend except the step that names it
+		const held = reservedTotal(reserves.filter(r => !released.has(r.label) && r.label !== step.usesReserve));
+		const spendable = Object.fromEntries(RESOURCES.map(r => [r, Math.max(0, treasury[r] - held[r])])) as Resources;
+		if(affordable(spendable, option.cost)) {
 			if(await attempt(report, town.id, `build ${option.building}`, () => bridge.call("build", { town: town.id, building: option.building }))) {
 				report.built.push({ town: town.id, building: option.building });
 				if(step.usesReserve)
@@ -65,7 +69,7 @@ async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, 
 			return treasury;
 		}
 
-		const missing = RESOURCES.filter(r => treasury[r] < option.cost[r]);
+		const missing = RESOURCES.filter(r => spendable[r] < option.cost[r]);
 		if(missing.some(r => r !== "gold"))
 			report.deviations.push({ kind: "blocked_by_resource", town: town.id, building: option.building, missing: missing.filter(r => r !== "gold") });
 		else if(step.onShortage === "wait")
@@ -119,7 +123,7 @@ export async function executePlan(bridge: BridgeClient, plan: Plan, facts: Econo
 			continue;
 		}
 		present.push({ plan: townPlan, town });
-		treasury = await buildStep(bridge, townPlan, town, treasury, report, released);
+		treasury = await buildStep(bridge, townPlan, town, treasury, plan.reserves, report, released);
 	}
 	const reserved = reservedTotal(plan.reserves.filter(r => !released.has(r.label)));
 	for(const { plan: townPlan, town } of present)

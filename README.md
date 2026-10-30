@@ -19,7 +19,7 @@ Name: what we called the computer player 25 years ago (тачка).
 
 When the game ends (or the client is closed) Tachka stays up: it saves `final.json` (the bridge's last answers plus the last facts it saw), shows a Game over card, and you can talk the game over with it.
 
-Restart without losing the thread: `npm run play -- --player blue --resume` continues the latest game folder (journal, economy plan, turn counter) and shows its last turns on the page. Without `--resume` a new folder starts empty.
+Restarting needs no flag: Tachka looks at the game's day and continues the latest game folder (journal, economy plan, turn counter, chat) when that game was not won or lost and its last day is not after today's; otherwise it starts a new folder. `--new` forces a new folder, `--resume` forces the latest one. A closed or crashed client does not end a game, so restarting and loading an autosave continues it.
 
 Options: `--king cli|api|scripted` (scripted needs no model), `--model sonnet` (CLI), `--turns N`, `--ui PORT`, `--out DIR` (default `logs/<time>`: `exchanges.jsonl` is every bridge request and reply, `journal.jsonl` is one line per turn).
 

@@ -154,14 +154,14 @@ export function newLoopState(): LoopState {
 
 /** What must outlive a restart besides the journal: the plan, the treasury at the end of our last turn, the turn counter. */
 export function saveLoopState(path: string, state: LoopState): void {
-	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn }));
+	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended }));
 }
 
 export function loadLoopState(path: string): LoopState {
 	if(!existsSync(path))
 		return newLoopState();
 	const saved = JSON.parse(readFileSync(path, "utf8"));
-	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0 };
+	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended };
 }
 
 function mergeSites(perHero: Record<number, Site[]>): Site[] {

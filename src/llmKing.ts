@@ -5,7 +5,7 @@ import type { Brain } from "./brain.js";
 import { renderBrief } from "./brief.js";
 import { decisionSchema, parseDecision, type Brief, type Decision, type King } from "./king.js";
 import type { KingUsage } from "./core.js";
-import { defaultAnswer, type Question } from "./questions.js";
+import { defaultAnswer, type AnswerContext, type Question } from "./questions.js";
 
 const SYSTEM = readFileSync(join(import.meta.dirname, "..", "prompts", "king.md"), "utf8");
 
@@ -46,8 +46,8 @@ export class LlmKing implements King {
 		return { note: `The king could not decide (${lastError.slice(0, 200)}); the current plan keeps running and heroes stand still.`, missions: [], hire: [], merge: [] };
 	}
 
-	answer(question: Question): number | undefined {
-		return defaultAnswer(question);
+	answer(question: Question, context?: AnswerContext): number | undefined {
+		return defaultAnswer(question, context);
 	}
 
 	usage() {

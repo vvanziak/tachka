@@ -7,11 +7,11 @@ import { executePlan, type ExecutionReport } from "./executor.js";
 import { collectFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
 import { parseDecision, type Brief, type King } from "./king.js";
-import { collectSites, goTo, type MoveOutcome, type Site } from "./missions.js";
+import { collectSites, goTo, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import type { Resources } from "./state.js";
 import type { Tachka } from "./core.js";
-import type { Question } from "./questions.js";
+import type { AnswerContext, Question } from "./questions.js";
 import { nextTurn } from "./turn.js";
 
 export interface LoopState {
@@ -66,9 +66,9 @@ export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<b
 	}
 }
 
-async function answerQuestions(deps: LoopDeps, questions: Question[], deviations: unknown[]): Promise<boolean> {
+async function answerQuestions(deps: LoopDeps, questions: Question[], deviations: unknown[], context: AnswerContext = {}): Promise<boolean> {
 	for(const question of questions) {
-		const choice = deps.king.answer?.(question);
+		const choice = deps.king.answer?.(question, context);
 		if(choice === undefined) {
 			deps.tachka.publish({ type: "problem", text: `a dialog the king cannot answer is open: ${JSON.stringify(question).slice(0, 300)}` });
 			deviations.push({ kind: "unanswered_question", question });
@@ -80,13 +80,13 @@ async function answerQuestions(deps: LoopDeps, questions: Question[], deviations
 }
 
 /** Answers dialogs until none is open: an answer can open the next one (a Tree of Knowledge level-up, for instance). */
-async function settleQuestions(deps: LoopDeps, deviations: unknown[]): Promise<boolean> {
+async function settleQuestions(deps: LoopDeps, deviations: unknown[], context: AnswerContext = {}): Promise<boolean> {
 	for(let round = 0; round < 8; round++) {
 		const status = await deps.tachka.bridge.call<{ pendingQuestions?: Question[] }>("status");
 		const open = status.pendingQuestions ?? [];
 		if(open.length === 0)
 			return true;
-		if(!await answerQuestions(deps, open, deviations))
+		if(!await answerQuestions(deps, open, deviations, context))
 			return false;
 	}
 	deviations.push({ kind: "questions_keep_coming" });
@@ -184,9 +184,15 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
 				if(outcome.stopped === "battle waiting for orders")
 					await bridge.call("battle_act", { action: "autofight" });
-				if(!await settleQuestions(deps, deviations)) {
+				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight })) {
 					state.deviations = deviations;
 					return false;
+				}
+				// the hero already stands on the target (a visit that opened a dialog): walking there again would only repeat the visit
+				const here = (await bridge.call<{ heroes?: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 })).heroes?.find(h => h.id === mission.hero)?.pos;
+				if(here && here.x === mission.target.x && here.y === mission.target.y && here.z === mission.target.z) {
+					outcome = { ...outcome, reached: true, stopped: undefined, pendingQuestions: [] };
+					break;
 				}
 				outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
 			}
@@ -218,6 +224,10 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		type: "turn", day: facts.day, journal: entry,
 		line: `built ${economy?.built.map(b => b.building.replace("core:", "")).join(", ") || "nothing"}; recruited ${economy?.recruited.reduce((n, r) => n + r.count, 0) ?? 0}; ${moves.map(m => `${m.intent}${m.reached ? " (done)" : m.stopped ? ` (${m.stopped})` : ""}`).join("; ") || "no moves"}`,
 	});
+	if(!await settleQuestions(deps, deviations)) {
+		state.deviations = deviations;
+		return false;
+	}
 	await nextTurn(bridge);
 	return true;
 }

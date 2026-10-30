@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { collectBlockers, siteResource } from "../src/blockers.js";
 import { Tachka } from "../src/core.js";
 import type { EconomyFacts } from "../src/facts.js";
+import { defaultAnswer } from "../src/questions.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
 import { nextTurn } from "../src/turn.js";
@@ -202,5 +203,16 @@ describe("nextTurn", () => {
 		cleanup.push(() => tachka.bridge.close(), server.close);
 		await nextTurn(tachka.bridge);
 		expect(calls).toEqual(["end_turn", "battle_act", "end_turn", "wait_for_turn"]);
+	});
+});
+
+describe("defaultAnswer", () => {
+	it("declines unrequested fights, recruit prompts and paid experience; fights when the mission says so", () => {
+		const dialog = (text: string) => ({ id: 1, kind: "dialog", text });
+		expect(defaultAnswer(dialog("Much to your dismay, the Monastery is guarded by several Monks.\n\nDo you wish to fight the guards?"))).toBe(0);
+		expect(defaultAnswer(dialog("Much to your dismay, the Monastery is guarded by several Monks.\n\nDo you wish to fight the guards?"), { allowFight: true })).toBe(1);
+		expect(defaultAnswer(dialog("{Monastery}\n\nWould you like to recruit Monks?"))).toBe(0);
+		expect(defaultAnswer(dialog("{Tree of Knowledge}\n\nUpon your approach, the tree opens its eyes in delight."))).toBe(0);
+		expect(defaultAnswer(dialog("{Chest}\n\nYou may take the gold or distribute it to the peasants for experience."))).toBe(1);
 	});
 });

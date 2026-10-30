@@ -5,7 +5,7 @@ import type { EconomyFacts } from "./facts.js";
 import type { JournalEntry } from "./journal.js";
 import type { Pos, Site } from "./missions.js";
 import { planSchema, type Plan } from "./plan.js";
-import { defaultAnswer, type Question } from "./questions.js";
+import { defaultAnswer, type AnswerContext, type Question } from "./questions.js";
 import type { KingUsage } from "./core.js";
 
 const pos = z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).strict();
@@ -46,7 +46,7 @@ export interface Brief {
 export interface King {
 	decide(brief: Brief): Promise<Decision>;
 	/** Choice for a dialog; undefined stops the game loop. */
-	answer?(question: Question): number | undefined;
+	answer?(question: Question, context?: AnswerContext): number | undefined;
 	/** Cost of the last decision and the running total, for kings that call a model. */
 	usage?(): { last: KingUsage; total: KingUsage; ms: number };
 }
@@ -81,7 +81,7 @@ export class ScriptedKing implements King {
 		};
 	}
 
-	answer(question: Question): number | undefined {
-		return defaultAnswer(question);
+	answer(question: Question, context?: AnswerContext): number | undefined {
+		return defaultAnswer(question, context);
 	}
 }

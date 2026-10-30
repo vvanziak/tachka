@@ -53,7 +53,15 @@ if(resume)
 console.log(`open http://127.0.0.1:${uiPort}  (player ${player}, port ${portForPlayer(player)}, logs in ${dir})`);
 
 const abort = new AbortController();
-process.on("SIGINT", () => abort.abort());
+// state is saved after every turn, so leaving mid-call is safe: ask the loop to stop, then exit anyway
+for(const signal of ["SIGINT", "SIGTERM"] as const)
+	process.on(signal, () => {
+		if(abort.signal.aborted)
+			process.exit(1);
+		console.log("\nstopping (press Ctrl-C again to leave at once)");
+		abort.abort();
+		setTimeout(() => process.exit(0), 1500).unref();
+	});
 
 try {
 	await waitForBridge(tachka, portForPlayer(player), abort.signal);

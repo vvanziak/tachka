@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tachka</title>
+<style>
+:root {
+  --bg: #f4f1ea; --panel: #fffdf8; --ink: #2b2620; --muted: #7a7064; --line: #e3dccd;
+  --accent: #8a3b12; --accent-ink: #fff; --king: #efe3c8; --human: #dfe9f2; --warn: #b3261e; --ok: #2f6f3e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17140f; --panel: #211d16; --ink: #ece4d3; --muted: #9a8f7c; --line: #3a3326;
+    --accent: #d9803f; --accent-ink: #1a1208; --king: #332a1a; --human: #1f2d3a; --warn: #ff8a80; --ok: #7fcf8d;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+h1 { font: 700 20px/1 Georgia, serif; margin: 0; letter-spacing: .5px; color: var(--accent); }
+.pill { padding: 2px 10px; border-radius: 99px; background: var(--king); font-size: 13px; }
+.pill.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.res { display: flex; flex-wrap: wrap; gap: 6px; }
+.res span { font-variant-numeric: tabular-nums; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.res b { font-weight: 600; margin-right: 4px; color: var(--muted); }
+.spacer { flex: 1; }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.chat { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+#feed { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; background: var(--king); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.human { align-self: flex-end; background: var(--human); }
+.msg small { display: block; color: var(--muted); margin-top: 4px; }
+.thought { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 2px 4px; border-left: 3px solid var(--line); max-width: 92%; overflow-wrap: anywhere; }
+.thought b { color: var(--ink); font-weight: 600; }
+.turn { align-self: stretch; font-size: 13px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.turn b { color: var(--accent); }
+.problem { align-self: stretch; color: var(--warn); font-size: 13px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 8px; overflow-wrap: anywhere; }
+form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+textarea { flex: 1; resize: none; height: 44px; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+aside { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+h2 { margin: 0 0 6px; font: 600 12px/1 system-ui; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+ul { margin: 0; padding-left: 18px; }
+li { margin: 2px 0; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+details summary { cursor: pointer; color: var(--muted); }
+pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; } aside { max-height: 40vh; border-top: 1px solid var(--line); } .chat { border-right: 0; } body { height: auto; min-height: 100vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>TACHKA</h1>
+  <span class="pill" id="day">connecting…</span>
+  <span class="pill" id="status">idle</span>
+  <div class="res" id="res"></div>
+  <span class="spacer"></span>
+  <span class="muted" id="cost"></span>
+  <button id="pause">Pause</button>
+</header>
+<main>
+  <div class="chat">
+    <div id="feed" aria-live="polite"></div>
+    <form id="form">
+      <textarea id="text" placeholder="Talk to the king: advice, a question, a change of plan…" aria-label="Message to the king"></textarea>
+      <button class="primary" type="submit">Send</button>
+    </form>
+  </div>
+  <aside>
+    <section><h2>Heroes</h2><div id="heroes" class="muted">waiting for the first turn</div></section>
+    <section><h2>Towns</h2><div id="towns" class="muted"></div></section>
+    <section><h2>Blocked</h2><div id="blockers" class="muted"></div></section>
+    <section><h2>Plan</h2><div id="plan" class="muted"></div></section>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const feed = $("feed");
+const short = s => String(s).replace(/^core:/, "");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let paused = false, lastDay = 0;
+
+function add(cls, html) {
+  const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
+  const el = document.createElement("div");
+  el.className = cls; el.innerHTML = html; feed.appendChild(el);
+  if (nearBottom) feed.scrollTop = feed.scrollHeight;
+}
+function status(text, busy) { const s = $("status"); s.textContent = text; s.classList.toggle("busy", !!busy); }
+function tokens(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
+
+function showFacts(f) {
+  lastDay = f.day;
+  $("day").textContent = `Day ${f.day} · week ${f.week}`;
+  $("res").innerHTML = Object.entries(f.resources).map(([k, v]) => `<span><b>${k}</b>${v}${f.income && f.income[k] ? ` <span class="muted">${f.income[k] > 0 ? "+" : ""}${f.income[k]}</span>` : ""}</span>`).join("");
+  $("heroes").innerHTML = f.heroes.length ? "<ul>" + f.heroes.map(h => `<li><b>${esc(h.name)}</b> ${esc(short(h.class))} L${h.level} at ${h.pos.x},${h.pos.y} · move ${h.movement}<br><span class="muted">${h.army.map(a => a.count + " " + esc(short(a.creature))).join(", ") || "no army"} · A${h.primarySkills.attack} D${h.primarySkills.defense} P${h.primarySkills.spellPower} K${h.primarySkills.knowledge}</span></li>`).join("") + "</ul>" : "no heroes";
+  $("towns").innerHTML = f.towns.length ? "<ul>" + f.towns.map(t => `<li><b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings</span>${t.stock.length ? `<br><span class="muted">stock: ${t.stock.filter(s => s.available).map(s => s.available + " " + esc(short(s.creature))).join(", ") || "none"}</span>` : ""}</li>`).join("") + "</ul>" : "no towns";
+  $("blockers").innerHTML = f.blockers.length ? "<ul>" + f.blockers.map(b => `<li>${esc(short(b.building))} <span class="muted">short ${Object.entries(b.short).map(([k, v]) => v + " " + k).join(", ")} · ${b.suppliers.length ? "supply: " + esc(b.suppliers[0].site.name) + " (" + b.suppliers[0].site.turns + " turns)" : "no known supplier"}</span></li>`).join("") + "</ul>" : "nothing blocked";
+  $("plan").innerHTML = f.plan ? `<div>${esc(f.plan.note || "")}</div><div class="muted">review by day ${f.plan.reviewByDay}</div><details><summary>full plan</summary><pre>${esc(JSON.stringify(f.plan, null, 1))}</pre></details>` : "none yet";
+  status("the king is thinking", true);
+}
+
+function handle(e) {
+  switch (e.type) {
+    case "facts": showFacts(e.facts); break;
+    case "king":
+      add("thought", `<b>Day ${lastDay}</b> ${esc(e.note)}<br><small>${tokens(e.usage.inputTokens)} in / ${tokens(e.usage.outputTokens)} out${e.usage.costUsd ? " · $" + e.usage.costUsd.toFixed(3) : ""}${e.ms ? " · " + (e.ms / 1000).toFixed(1) + " s" : ""}</small>`);
+      $("cost").textContent = e.total.inputTokens ? `${tokens(e.total.inputTokens + e.total.outputTokens)} tokens${e.total.costUsd ? " · $" + e.total.costUsd.toFixed(2) : ""}` : "";
+      status("acting", true); break;
+    case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
+    case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
+    case "problem": add("problem", esc(e.text)); break;
+    case "paused": paused = true; $("pause").textContent = "Resume"; status("paused", false); break;
+    case "resumed": paused = false; $("pause").textContent = "Pause"; break;
+  }
+}
+
+const source = new EventSource("/events");
+source.onmessage = m => handle(JSON.parse(m.data));
+source.onerror = () => status("disconnected", false);
+
+$("pause").onclick = () => fetch(paused ? "/resume" : "/pause", { method: "POST" });
+$("form").onsubmit = ev => {
+  ev.preventDefault();
+  const text = $("text").value.trim();
+  if (!text) return;
+  $("text").value = "";
+  fetch("/say", { method: "POST", body: JSON.stringify({ text }) });
+};
+$("text").onkeydown = ev => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("form").requestSubmit(); } };
+</script>
+</body>
+</html>

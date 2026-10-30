@@ -8,6 +8,7 @@ export type Deviation =
 	| { kind: "plan_expired"; reviewByDay: number }
 	| { kind: "town_without_plan"; town: number }
 	| { kind: "plan_town_missing"; town: number }
+	| { kind: "unknown_building"; town: number; building: string }
 	| { kind: "blocked_by_resource"; town: number; building: string; missing: string[] }
 	| { kind: "rejected"; town: number; action: string; error: string };
 
@@ -18,6 +19,9 @@ export interface ExecutionReport {
 	deviations: Deviation[];
 	treasuryAfter: Resources;
 }
+
+/** The brief shows building keys without the mod prefix, so plans may name them either way. */
+const bare = (key: string) => key.replace(/^[^:]+:/, "");
 
 function reservedTotal(reserves: Plan["reserves"]): Resources {
 	const total = Object.fromEntries(RESOURCES.map(r => [r, 0])) as Resources;
@@ -49,9 +53,12 @@ async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, 
 		return treasury;
 
 	for(const step of plan.build) {
-		const option = town.options.find(o => o.building === step.building);
-		if(!option)
+		const option = town.options.find(o => bare(o.building) === bare(step.building));
+		if(!option) {
+			if(!town.buildings.some(b => bare(b) === bare(step.building)))
+				report.deviations.push({ kind: "unknown_building", town: town.id, building: step.building });
 			continue;
+		}
 
 		if(option.state !== "allowed" && option.state !== "no_resources")
 			continue;

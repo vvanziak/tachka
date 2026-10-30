@@ -49,7 +49,7 @@ let previousEnd: Resources | undefined;
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "you> " });
 
 tachka.subscribe(event => {
-	if(event.type === "chat" && event.from === "tachka")
+	if(event.type === "chat" && event.from === "king")
 		console.log(`tachka> ${event.text}`);
 	else if(event.type === "paused" || event.type === "resumed")
 		console.log(`[${event.type}]`);

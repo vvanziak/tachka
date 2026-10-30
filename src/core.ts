@@ -1,8 +1,18 @@
 import { BridgeClient, type BridgeOptions, type Exchange } from "./bridge.js";
 
+export interface KingUsage {
+	inputTokens: number;
+	outputTokens: number;
+	costUsd: number;
+}
+
 export type TachkaEvent =
-	| { type: "chat"; from: "human" | "tachka"; text: string }
+	| { type: "chat"; from: "human" | "king"; text: string }
 	| { type: "exchange"; exchange: Exchange }
+	| { type: "facts"; facts: unknown }
+	| { type: "turn"; day: number; line: string; journal: unknown }
+	| { type: "king"; note: string; usage: KingUsage; total: KingUsage; ms: number }
+	| { type: "problem"; text: string }
 	| { type: "paused" }
 	| { type: "resumed" };
 
@@ -20,7 +30,7 @@ export class Tachka {
 			...options,
 			onExchange: exchange => {
 				options.onExchange?.(exchange);
-				this.emit({ type: "exchange", exchange });
+				this.publish({ type: "exchange", exchange });
 			},
 		});
 	}
@@ -33,7 +43,7 @@ export class Tachka {
 	/** A message from the human; the brain takes it from the inbox at the next decision point. */
 	say(text: string): void {
 		this.inbox.push(text);
-		this.emit({ type: "chat", from: "human", text });
+		this.publish({ type: "chat", from: "human", text });
 	}
 
 	drainInbox(): string[] {
@@ -48,15 +58,15 @@ export class Tachka {
 
 	pause(): void {
 		this.paused = true;
-		this.emit({ type: "paused" });
+		this.publish({ type: "paused" });
 	}
 
 	resume(): void {
 		this.paused = false;
-		this.emit({ type: "resumed" });
+		this.publish({ type: "resumed" });
 	}
 
-	private emit(event: TachkaEvent): void {
+	publish(event: TachkaEvent): void {
 		for(const listener of this.listeners)
 			listener(event);
 	}

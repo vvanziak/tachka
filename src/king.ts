@@ -5,12 +5,16 @@ import type { EconomyFacts } from "./facts.js";
 import type { JournalEntry } from "./journal.js";
 import type { Pos, Site } from "./missions.js";
 import { planSchema, type Plan } from "./plan.js";
+import { defaultAnswer, type Question } from "./questions.js";
+import type { KingUsage } from "./core.js";
 
 const pos = z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).strict();
 
 export const decisionSchema = z.object({
 	/** The king's reasoning in its own words; goes to the journal. */
 	note: z.string(),
+	/** Message to the human, shown in the chat. */
+	reply: z.string().optional(),
 	/** Replaces the economy plan when present. */
 	plan: planSchema.optional(),
 	missions: z.array(z.object({ hero: z.number().int(), target: pos, intent: z.string(), allowFight: z.boolean().optional() }).strict()).default([]),
@@ -41,8 +45,10 @@ export interface Brief {
 
 export interface King {
 	decide(brief: Brief): Promise<Decision>;
-	/** Choice for a dialog the loop cannot judge; undefined stops the game loop. */
-	answer?(question: { id: number; kind?: string; text?: string }): number | undefined;
+	/** Choice for a dialog; undefined stops the game loop. */
+	answer?(question: Question): number | undefined;
+	/** Cost of the last decision and the running total, for kings that call a model. */
+	usage?(): { last: KingUsage; total: KingUsage; ms: number };
 }
 
 /** Test double for the loop, not a player: default economy plan, heroes go to the nearest unguarded supplier or site. */
@@ -75,7 +81,7 @@ export class ScriptedKing implements King {
 		};
 	}
 
-	answer(question: { id: number }): number {
-		return 1;
+	answer(question: Question): number | undefined {
+		return defaultAnswer(question);
 	}
 }

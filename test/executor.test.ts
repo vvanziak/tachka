@@ -41,6 +41,13 @@ describe("executePlan", () => {
 		expect(report.built).toEqual([{ town: 1, building: "core:citadel" }]);
 	});
 
+	it("accepts building keys without the mod prefix and reports names that match nothing", async () => {
+		const t = town(1, { buildings: ["core:fort"], options: [option("core:marketplace", { gold: 500 })] });
+		const { report } = await run({ madeOnDay: 1, reviewByDay: 9, towns: [{ town: 1, build: [{ building: "fort" }, { building: "marketplce" }, { building: "marketplace" }] }] }, facts([t], 1000));
+		expect(report.built).toEqual([{ town: 1, building: "core:marketplace" }]);
+		expect(report.deviations).toEqual([{ kind: "unknown_building", town: 1, building: "marketplce" }]);
+	});
+
 	it("saves for a planned building when gold is short, unless the step says skip", async () => {
 		const t = town(1, { options: [option("core:castle", { gold: 5000 }, "no_resources"), option("core:tavern", { gold: 500 })] });
 		const plan = (onShortage: string) => ({ madeOnDay: 1, reviewByDay: 9, towns: [{ town: 1, build: [{ building: "core:castle", onShortage }, { building: "core:tavern" }] }] });

@@ -1,5 +1,5 @@
 import type { BridgeClient } from "./bridge.js";
-import { RESOURCES, type Buildable, type GameState, type Recruitable, type Resources, type Town } from "./state.js";
+import { RESOURCES, type Buildable, type GameState, type Hero, type Recruitable, type Resources, type Town } from "./state.js";
 
 export interface BuildOption extends Buildable {
 	/** Resources the treasury lacks for this building right now. */
@@ -26,6 +26,7 @@ export interface EconomyFacts {
 	/** Treasury now minus treasury at the end of our previous turn; undefined on the first turn. */
 	incomeSinceLastTurn: Resources | undefined;
 	towns: TownFacts[];
+	heroes: Hero[];
 }
 
 interface StateWithCalendar extends GameState {
@@ -58,5 +59,5 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 	}
 
 	const income = previousEnd && Object.fromEntries(RESOURCES.map(r => [r, state.resources[r] - previousEnd[r]])) as Resources;
-	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns };
+	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns, heroes: state.heroes };
 }

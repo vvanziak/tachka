@@ -27,10 +27,22 @@ export interface Buildable {
 	cost: Resources;
 }
 
+export interface Hero {
+	id: number;
+	name: string;
+	class: string;
+	level: number;
+	pos: { x: number; y: number; z: number };
+	movement: number;
+	army: Array<{ creature: string; count: number; slot: number }>;
+	primarySkills: Record<string, number>;
+}
+
 export interface GameState {
 	day: number;
 	resources: Resources;
 	towns: Town[];
+	heroes: Hero[];
 }
 
 export function canAfford(have: Resources, cost: Resources): boolean {

@@ -31,6 +31,15 @@ describe("reviewDecision", () => {
 		expect(codes(brief({}, { towns: [town({ garrison: 5 })], heroes: [] }), decision())).toEqual([]);
 	});
 
+	it("flags a trip home for a handful of garrison units", () => {
+		const away = { x: 20, y: 20, z: 0 };
+		const home = decision({ missions: [{ hero: 1, target: pos, intent: "restock" }] });
+		const small = { heroes: [hero(1, 60, away)], towns: [town({ garrison: 6 })] };
+		expect(codes(brief({}, small), home)).toContain("small_restock_trip");
+		const big = { heroes: [hero(1, 60, away)], towns: [town({ garrison: 40 })] };
+		expect(codes(brief({}, big), home)).not.toContain("small_restock_trip");
+	});
+
 	it("flags a hire that makes a third hero", () => {
 		const b = brief({}, { heroes: [hero(1), hero(2, 3, { x: 9, y: 9, z: 0 })] });
 		expect(codes(b, decision({ hire: [{ town: 1, hero: 77, why: "flag mines in the far east" }] }))).toContain("many_heroes");

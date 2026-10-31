@@ -46,6 +46,18 @@ export function reviewDecision(brief: Brief, decision: Decision): Finding[] {
 		}
 	}
 
+	// a trip home for a few fresh units costs a day of movement and leaves the map to the enemy
+	for(const town of facts.towns) {
+		for(const mission of decision.missions) {
+			const hero = facts.heroes.find(h => h.id === mission.hero);
+			if(!hero || !near(mission.target, town.pos, 0) || near(hero.pos, town.pos, 0) || mission.allowFight)
+				continue;
+			const carried = hero.army.reduce((n, a) => n + a.count, 0);
+			if(town.garrison < Math.max(10, 0.4 * carried))
+				found.push({ code: "small_restock_trip", text: `${hero.name} (${hero.id}) goes back to ${town.name} for ${town.garrison} garrison units while carrying ${carried}. That is a day of movement for a small gain. Recruit in one batch later, merge when the hero passes the town anyway, and use this turn to fight the easiest stack in FIGHT CANDIDATES or to explore.` });
+		}
+	}
+
 	const newHeroes = facts.heroes.length + decision.hire.length;
 	if(decision.hire.length > 0 && newHeroes > 2) {
 		const sizes = facts.heroes.map(h => `${h.name} ${h.army.reduce((n, a) => n + a.count, 0)} units`).join(", ");

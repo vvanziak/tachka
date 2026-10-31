@@ -339,19 +339,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 			deviations.push({ kind: "guarded", hero: mission.hero, guard: outcome.guard, intent: mission.intent });
 	}
 
-	if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {
-		state.deviations = deviations;
-		return false;
-	}
-
-	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
-	for(const h of decision.hire) {
-		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", { town: h.town, hero: h.hero }));
-		// the bridge reports success before the server has decided; the hero must show up among ours
-		const heroes = (await bridge.call<{ heroes: Hero[] }>("get_state", { radius: 0 })).heroes;
-		if(!heroes.some(x => x.id === h.hero))
-			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
-	}
+	// merges run before the leftover walk: a hero that reached its town takes the garrison along instead of walking off without it
 	if(decision.merge.length > 0) {
 		// the server refuses stack changes between objects that are not together; check first and tell the king
 		const now = await bridge.call<{ heroes: Hero[]; towns: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 });
@@ -367,6 +355,19 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		}
 	}
 
+	if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {
+		state.deviations = deviations;
+		return false;
+	}
+
+	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
+	for(const h of decision.hire) {
+		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", { town: h.town, hero: h.hero }));
+		// the bridge reports success before the server has decided; the hero must show up among ours
+		const heroes = (await bridge.call<{ heroes: Hero[] }>("get_state", { radius: 0 })).heroes;
+		if(!heroes.some(x => x.id === h.hero))
+			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
+	}
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,

@@ -271,7 +271,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
 	for(const h of decision.hire) {
-		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", h));
+		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", { town: h.town, hero: h.hero }));
 		// the bridge reports success before the server has decided; the hero must show up among ours
 		const heroes = (await bridge.call<{ heroes: Hero[] }>("get_state", { radius: 0 })).heroes;
 		if(!heroes.some(x => x.id === h.hero))

@@ -18,7 +18,8 @@ export const decisionSchema = z.object({
 	/** Replaces the economy plan when present. */
 	plan: planSchema.optional(),
 	missions: z.array(z.object({ hero: z.number().int(), target: pos, intent: z.string(), allowFight: z.boolean().optional() }).strict()).default([]),
-	hire: z.array(z.object({ town: z.number().int(), hero: z.number().int() }).strict()).default([]),
+	/** `why` is the job the hero will do that nobody else can; it goes to the journal. */
+	hire: z.array(z.object({ town: z.number().int(), hero: z.number().int(), why: z.string().min(15) }).strict()).default([]),
 	merge: z.array(z.object({ from: z.number().int(), to: z.number().int() }).strict()).default([]),
 }).strict();
 

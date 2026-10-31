@@ -356,10 +356,10 @@ describe("hiring", () => {
 		const tachka = new Tachka({ port: server.port });
 		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
 		cleanup.push(() => tachka.bridge.close(), server.close);
-		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77 }], merge: [] }; } };
+		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77, why: "flag the far mines in the east" }], merge: [] }; } };
 		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
 		const entry = journal.tail(3, 1)[0];
 		expect(entry?.deviations).toContainEqual({ kind: "hire_failed", hero: 77, town: 1 });
-		expect(entry?.orders?.hire).toEqual([{ town: 1, hero: 77 }]);
+		expect(entry?.orders?.hire).toEqual([{ town: 1, hero: 77, why: "flag the far mines in the east" }]);
 	});
 });

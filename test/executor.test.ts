@@ -11,10 +11,10 @@ const option = (building: string, cost: Partial<Resources>, state = "allowed") =
 const stock = (level: number, creature: string, available: number, gold: number) => ({ level, creature, name: creature, available, cost: res({ gold }) });
 
 function town(id: number, extra: Partial<TownFacts> = {}): TownFacts {
-	return { id, name: `T${id}`, faction: "core:inferno", builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], ...extra };
+	return { id, name: `T${id}`, faction: "core:inferno", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], ...extra };
 }
 function facts(towns: TownFacts[], gold: number, extra: Partial<Resources> = {}): EconomyFacts {
-	return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold, ...extra }), incomeSinceLastTurn: undefined, towns, heroes: [] };
+	return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold, ...extra }), incomeSinceLastTurn: undefined, towns, heroes: [], threats: [] };
 }
 
 let cleanup: Array<() => unknown> = [];
@@ -78,6 +78,18 @@ describe("executePlan", () => {
 		const f = facts([t], 3200, { sulfur: 10 });
 		expect((await run(plan([{ building: "core:tavern", onShortage: "skip" }]), f)).report.built).toEqual([]);
 		expect((await run(plan([{ building: "core:dwellingLvl7", usesReserve: "dragons" }]), f)).report.built).toEqual([{ town: 1, building: "core:dwellingLvl7" }]);
+	});
+
+	it("keeps back the gold of an ordered hire from builds and recruiting", async () => {
+		const t = town(1, { options: [option("core:tavern", { gold: 500 })], recruitable: [stock(0, "core:imp", 100, 50)] });
+		const plan = { madeOnDay: 1, reviewByDay: 9, towns: [{ town: 1, build: [{ building: "core:tavern" }], recruit: { mode: "all" } }] };
+		const server = await startFakeBridge(() => ({}));
+		const bridge = new BridgeClient({ port: server.port });
+		cleanup.push(() => bridge.close(), server.close);
+		const report = await executePlan(bridge, parsePlan(plan), facts([t], 3000), res({ gold: 2500 }));
+		expect(report.built).toEqual([{ town: 1, building: "core:tavern" }]);
+		expect(report.recruited).toEqual([]);
+		expect(report.treasuryAfter.gold).toBe(2500);
 	});
 
 	it("recruits only the listed levels, and nothing in none mode", async () => {

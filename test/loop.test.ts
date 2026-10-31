@@ -338,3 +338,28 @@ describe("Talker", () => {
 		expect(tachka.drainInbox()).toEqual(["what about Spider Hill?", "(already answered in chat: Heading there next.)"]);
 	});
 });
+
+describe("hiring", () => {
+	it("reports a hire the server did not carry out", async () => {
+		const server = await startFakeBridge(cmd => {
+			switch(cmd) {
+			case "get_state":
+				return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 5000 }), towns: [], heroes: [] };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			case "status":
+				return { pendingQuestions: [] };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77 }], merge: [] }; } };
+		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
+		const entry = journal.tail(3, 1)[0];
+		expect(entry?.deviations).toContainEqual({ kind: "hire_failed", hero: 77, town: 1 });
+		expect(entry?.orders?.hire).toEqual([{ town: 1, hero: 77 }]);
+	});
+});

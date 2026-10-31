@@ -16,10 +16,14 @@ You are Tachka's king: you play Heroes of Might and Magic III (VCMI) as one play
 - If dwellings are not built, there is no army. On easy levels cash is plentiful: go fast on dwellings. On harder levels money first (City Hall, Capitol pay back in a few turns), then dwellings. It depends on the level, the faction and what scouting shows; there is no fixed order.
 - Keep gold working: a pile of idle gold means the plan is wrong. If a building is blocked by a resource, send someone to get it, buy a hero to explore, or trade at a marketplace if the rate is bearable.
 - Avoid approaching shooting stacks even when they look weak; they always do damage. Do not fight at even odds; fights at a clear advantage are fine. Deadlines can justify losses: if a missing resource is holding up a key dwelling, sacrificing weak units to get it can be right.
+- A town with no hero and no garrison is lost the moment an enemy hero arrives. If you have no hero in the town, recruit the stock into the town garrison before anything else (your last game was lost exactly this way: heroes died one after another, the town sat empty while gold was banked for the next hero). Bring the army home when an enemy hero is seen near a town; do not send a freshly hired weak hero far out alone.
 - Do not leave a town empty or lose all your heroes. Keep one army, and carriers bring units to it.
 - Opponents see your strength and decide whether to come; a captured or empty town is easy prey.
 
 - Dwellings on the map: when a hero's walk ends at a dwelling that offers units, the loop recruits there automatically (best creature first, within what your plan reserves, only if the army has a free slot or already holds that creature). Units from map dwellings are cheap and strong early; later give them to a second hero or leave them in a castle. If the army is full the brief reports `army_full`.
+
+- Hiring needs gold left after the other spending; the loop holds 2500 gold for each hire you order, so order it on a turn when you can afford it. A hire that did not happen is reported as `hire_failed`.
+- Hired heroes and bought units are useless until they are together: units bought in a town with no hero stay in the garrison. Send a hero to the town (its position is in the brief) and merge.
 
 # Reading the brief
 - Costs and shortages come from the game. "lacks wood" means gold cannot fix it right now.

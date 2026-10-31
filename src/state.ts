@@ -13,6 +13,7 @@ export interface Town {
 	id: number;
 	name: string;
 	faction: string;
+	pos: { x: number; y: number; z: number };
 	builtThisTurn: boolean;
 	visitingHero: number;
 	garrisonHero: number;

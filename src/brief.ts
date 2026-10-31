@@ -15,7 +15,7 @@ export function renderBrief(brief: Brief): string {
 
 	lines.push("\nTOWNS");
 	for(const t of facts.towns) {
-		lines.push(`- town ${t.id} ${t.name} [${short(t.faction)}] ${t.builtThisTurn ? "(already built today)" : ""} visiting hero: ${t.hasVisitingHero}, garrison hero: ${t.hasGarrisonHero}`);
+		lines.push(`- town ${t.id} ${t.name} [${short(t.faction)}] at ${t.pos.x},${t.pos.y},${t.pos.z} ${t.builtThisTurn ? "(already built today)" : ""} visiting hero: ${t.hasVisitingHero}, garrison hero: ${t.hasGarrisonHero}`);
 		lines.push(`  built: ${t.buildings.map(short).join(", ")}`);
 		const options = t.options.map(o => `${short(o.building)}[${o.state}${o.missing.length ? " lacks " + o.missing.join("+") : ""}; ${money(o.cost)}]`);
 		lines.push(`  can build: ${options.join("; ") || "nothing"}`);
@@ -37,6 +37,12 @@ export function renderBrief(brief: Brief): string {
 		if(!sites.length)
 			lines.push("  (nothing reachable and unvisited is known)");
 	}
+
+	lines.push("\nVISIBLE OTHER PLAYERS' HEROES AND TOWNS (ratio = their strength against our strongest hero; a town with no hero in it and no army is empty and can be taken)");
+	for(const t of facts.threats)
+		lines.push(`- ${JSON.stringify(t)}`);
+	if(!facts.threats.length)
+		lines.push("none seen");
 
 	lines.push("\nBLOCKED BUILDINGS");
 	for(const b of brief.blockers)

@@ -10,6 +10,8 @@ export interface JournalEntry {
 	recruited: Array<{ town: number; creature: string; count: number }>;
 	moves: Array<{ hero: number; target: { x: number; y: number; z: number }; intent: string; reached: boolean; stopped?: string }>;
 	deviations: unknown[];
+	/** What the king ordered besides the economy plan and the walks. */
+	orders?: { hire: unknown[]; merge: unknown[] };
 }
 
 /** One JSON line per turn. The king sees only the last few days; the file keeps everything. */

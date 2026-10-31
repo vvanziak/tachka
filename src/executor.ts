@@ -23,8 +23,8 @@ export interface ExecutionReport {
 /** The brief shows building keys without the mod prefix, so plans may name them either way. */
 const bare = (key: string) => key.replace(/^[^:]+:/, "");
 
-export function reservedTotal(reserves: Plan["reserves"]): Resources {
-	const total = Object.fromEntries(RESOURCES.map(r => [r, 0])) as Resources;
+export function reservedTotal(reserves: Plan["reserves"], extra?: Resources): Resources {
+	const total = Object.fromEntries(RESOURCES.map(r => [r, extra?.[r] ?? 0])) as Resources;
 	for(const reserve of reserves)
 		for(const r of RESOURCES)
 			total[r] += reserve.amount[r] ?? 0;
@@ -48,7 +48,7 @@ async function attempt(report: ExecutionReport, town: number, action: string, ru
 	}
 }
 
-async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, treasury: Resources, reserves: Plan["reserves"], report: ExecutionReport, released: Set<string>): Promise<Resources> {
+async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, treasury: Resources, reserves: Plan["reserves"], hold: Resources, report: ExecutionReport, released: Set<string>): Promise<Resources> {
 	if(town.builtThisTurn)
 		return treasury;
 
@@ -64,7 +64,7 @@ async function buildStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts, 
 			continue;
 
 		// a reserve protects its amount from every spend except the step that names it
-		const held = reservedTotal(reserves.filter(r => !released.has(r.label) && r.label !== step.usesReserve));
+		const held = reservedTotal(reserves.filter(r => !released.has(r.label) && r.label !== step.usesReserve), hold);
 		const spendable = Object.fromEntries(RESOURCES.map(r => [r, Math.max(0, treasury[r] - held[r])])) as Resources;
 		if(affordable(spendable, option.cost)) {
 			if(await attempt(report, town.id, `build ${option.building}`, () => bridge.call("build", { town: town.id, building: option.building }))) {
@@ -108,7 +108,8 @@ async function recruitStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts
 }
 
 /** Carries out the king's plan against the facts. It never picks a building or a creature the plan does not name. */
-export async function executePlan(bridge: BridgeClient, plan: Plan, facts: EconomyFacts): Promise<ExecutionReport> {
+/** `hold` is withheld from every spend, for example the price of a hero the king ordered. */
+export async function executePlan(bridge: BridgeClient, plan: Plan, facts: EconomyFacts, hold?: Resources): Promise<ExecutionReport> {
 	const report: ExecutionReport = { day: facts.day, built: [], recruited: [], deviations: [], treasuryAfter: facts.resources };
 	if(facts.day > plan.reviewByDay)
 		report.deviations.push({ kind: "plan_expired", reviewByDay: plan.reviewByDay });
@@ -130,9 +131,9 @@ export async function executePlan(bridge: BridgeClient, plan: Plan, facts: Econo
 			continue;
 		}
 		present.push({ plan: townPlan, town });
-		treasury = await buildStep(bridge, townPlan, town, treasury, plan.reserves, report, released);
+		treasury = await buildStep(bridge, townPlan, town, treasury, plan.reserves, hold ?? reservedTotal([]), report, released);
 	}
-	const reserved = reservedTotal(plan.reserves.filter(r => !released.has(r.label)));
+	const reserved = reservedTotal(plan.reserves.filter(r => !released.has(r.label)), hold);
 	for(const { plan: townPlan, town } of present)
 		treasury = await recruitStep(bridge, townPlan, town, treasury, reserved, report);
 

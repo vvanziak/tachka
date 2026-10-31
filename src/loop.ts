@@ -60,6 +60,7 @@ export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<"
 	for(;;) {
 		if(signal?.aborted)
 			return "aborted";
+		const startedWaiting = Date.now();
 		const wait = await tachka.bridge.call<{ yourTurn: boolean; battle: boolean; gameOver?: boolean }>("wait_for_turn", { timeoutMs: 15_000 }, 60_000);
 		if(wait.gameOver)
 			return "over";
@@ -67,6 +68,9 @@ export async function awaitTurn(tachka: Tachka, signal?: AbortSignal): Promise<"
 			return "turn";
 		if(wait.battle)
 			await tachka.bridge.call("battle_act", { action: "autofight" });
+		// a wait that returns at once with nothing to do must not turn into a busy loop
+		else if(Date.now() - startedWaiting < 200)
+			await sleep(1_000);
 	}
 }
 
@@ -83,6 +87,7 @@ interface AnswerEnv extends AnswerContext {
 }
 
 const ARMY_SLOTS = 7;
+const HERO_PRICE = 2500;
 
 /** Buys what the hero can pay for and carry at a dwelling on the map: best level first, within what the plan keeps back. */
 async function recruitAtDwelling(deps: LoopDeps, question: Question & { object?: number; recruitable?: Recruitable[] }, deviations: unknown[], env: AnswerEnv): Promise<void> {
@@ -223,7 +228,8 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	let economy: ExecutionReport | undefined;
 	if(state.plan) {
-		economy = await executePlan(bridge, state.plan, await collectFacts(bridge, state.previousEnd));
+		const hold = Object.fromEntries(RESOURCES.map(r => [r, r === "gold" ? HERO_PRICE * decision.hire.length : 0])) as Resources;
+		economy = await executePlan(bridge, state.plan, await collectFacts(bridge, state.previousEnd), hold);
 		deviations.push(...economy.deviations);
 		state.previousEnd = economy.treasuryAfter;
 	}
@@ -264,14 +270,20 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	}
 
 	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
-	for(const h of decision.hire)
+	for(const h of decision.hire) {
 		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", h));
+		// the bridge reports success before the server has decided; the hero must show up among ours
+		const heroes = (await bridge.call<{ heroes: Hero[] }>("get_state", { radius: 0 })).heroes;
+		if(!heroes.some(x => x.id === h.hero))
+			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
+	}
 	for(const m of decision.merge)
 		await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
 
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,
+		orders: { hire: decision.hire, merge: decision.merge },
 	});
 	state.deviations = deviations;
 	const entry = journal.tail(facts.day, 1).at(-1);

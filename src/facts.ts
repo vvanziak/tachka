@@ -17,6 +17,7 @@ export interface TownFacts {
 	id: number;
 	name: string;
 	faction: string;
+	pos: { x: number; y: number; z: number };
 	builtThisTurn: boolean;
 	hasVisitingHero: boolean;
 	hasGarrisonHero: boolean;
@@ -36,6 +37,8 @@ export interface EconomyFacts {
 	incomeSinceLastTurn: Resources | undefined;
 	towns: TownFacts[];
 	heroes: Hero[];
+	/** Visible heroes and towns of other players with their strength against our strongest hero. */
+	threats: Array<Record<string, unknown>>;
 }
 
 interface StateWithCalendar extends GameState {
@@ -63,6 +66,7 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 			id: town.id,
 			name: town.name,
 			faction: town.faction,
+			pos: town.pos,
 			builtThisTurn: town.builtThisTurn,
 			hasVisitingHero: town.visitingHero >= 0,
 			hasGarrisonHero: town.garrisonHero >= 0,
@@ -74,5 +78,17 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 	}
 
 	const income = previousEnd && Object.fromEntries(RESOURCES.map(r => [r, state.resources[r] - previousEnd[r]])) as Resources;
-	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns, heroes: state.heroes };
+	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns, heroes: state.heroes, threats: await collectThreats(bridge, state.heroes[0]?.id) };
+}
+
+async function collectThreats(bridge: BridgeClient, hero: number | undefined): Promise<Array<Record<string, unknown>>> {
+	try {
+		const reply = await bridge.call<{ enemies?: Array<Record<string, unknown>> }>("threats", hero === undefined ? {} : { hero });
+		return (reply.enemies ?? []).filter(e => JSON.stringify(e).length < 1500);
+	}
+	catch(e) {
+		if(e instanceof BridgeError)
+			return [];
+		throw e;
+	}
 }

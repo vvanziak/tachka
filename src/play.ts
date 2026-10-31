@@ -97,7 +97,7 @@ try {
 				tachka.publish({ type: "turn", day: e.day, journal: e, line: `built ${e.built.map(b => b.building.replace("core:", "")).join(", ") || "nothing"}; recruited ${e.recruited.reduce((n, r) => n + r.count, 0)}; ${e.moves.map(m => m.intent).join("; ") || "no moves"}` });
 			}
 
-		const state = await playGame({ tachka, king, journal, memoryDays: 7 }, { maxTurns, signal: abort.signal, statePath: `${dir}/state.json`, resume });
+		const state = await playGame({ tachka, king, journal, memoryDays: 7, maxHeroes: Number(args.get("--max-heroes") ?? "3"), paceMs: Number(args.get("--pace") ?? "0") * 1000 }, { maxTurns, signal: abort.signal, statePath: `${dir}/state.json`, resume });
 		console.log(`stopped after ${state.turn} turns${state.ended ? ` (${state.ended})` : ""}`);
 		if(state.ended === "game over" || state.ended === "connection lost") {
 			tachka.publish({ type: "status", text: state.ended === "game over" ? "the game is over" : "the game was closed" });

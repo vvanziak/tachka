@@ -363,3 +363,29 @@ describe("hiring", () => {
 		expect(entry?.orders?.hire).toEqual([{ town: 1, hero: 77 }]);
 	});
 });
+
+describe("hero limit", () => {
+	it("refuses a hire when the limit is reached and says so", async () => {
+		const calls: string[] = [];
+		const server = await startFakeBridge(cmd => {
+			calls.push(cmd);
+			switch(cmd) {
+			case "get_state":
+				return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 5000 }), towns: [], heroes: [1, 2, 3].map(id => ({ id, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 0, army: [], primarySkills: {} })) };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			case "status":
+				return { pendingQuestions: [] };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77 }], merge: [] }; } };
+		await playTurn({ tachka, king, journal, memoryDays: 5, maxHeroes: 3 }, newLoopState());
+		expect(calls).not.toContain("buy_hero");
+		expect(journal.tail(3, 1)[0]?.deviations).toContainEqual({ kind: "hire_refused", hero: 77, reason: "hero limit 3 reached" });
+	});
+});

@@ -29,6 +29,10 @@ export interface LoopDeps {
 	journal: Journal;
 	/** Days of journal shown to the king. */
 	memoryDays: number;
+	/** Most heroes to have at once; hires beyond it are refused and reported. */
+	maxHeroes?: number;
+	/** Least time a turn takes, so a person can follow it. */
+	paceMs?: number;
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -184,6 +188,7 @@ function mergeSites(perHero: Record<number, Site[]>): Site[] {
 export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolean> {
 	const { tachka, king, journal } = deps;
 	const bridge = tachka.bridge;
+	const turnStarted = Date.now();
 	state.turn++;
 	while(tachka.isPaused)
 		await sleep(300);
@@ -270,12 +275,19 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	}
 
 	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first
+	let heroCount = facts.heroes.length;
 	for(const h of decision.hire) {
+		if(heroCount >= (deps.maxHeroes ?? 3)) {
+			deviations.push({ kind: "hire_refused", hero: h.hero, reason: `hero limit ${deps.maxHeroes ?? 3} reached` });
+			continue;
+		}
 		await rejected(`hire ${h.hero} in ${h.town}`, () => bridge.call("buy_hero", h));
 		// the bridge reports success before the server has decided; the hero must show up among ours
 		const heroes = (await bridge.call<{ heroes: Hero[] }>("get_state", { radius: 0 })).heroes;
 		if(!heroes.some(x => x.id === h.hero))
 			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
+		else
+			heroCount++;
 	}
 	for(const m of decision.merge)
 		await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
@@ -295,6 +307,9 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		state.deviations = deviations;
 		return false;
 	}
+	const wait = (deps.paceMs ?? 0) - (Date.now() - turnStarted);
+	if(wait > 0)
+		await sleep(wait);
 	await nextTurn(bridge);
 	return true;
 }

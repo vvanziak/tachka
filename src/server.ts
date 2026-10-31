@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, normalize } from "node:path";
 import type { Tachka, TachkaEvent } from "./core.js";
 
 const HISTORY = 400;
+const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".json": "application/json" };
 
 function body(req: IncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -17,6 +18,7 @@ function body(req: IncomingMessage): Promise<string> {
 /** Local web UI: a page, a server-sent event stream of everything Tachka does, and endpoints for chat, pause and resume. */
 export function startServer(tachka: Tachka, port: number): { close: () => void } {
 	const page = join(import.meta.dirname, "..", "ui", "index.html");
+	const assetsDir = join(import.meta.dirname, "..", "ui", "assets");
 	const history: TachkaEvent[] = [];
 	const clients = new Set<ServerResponse>();
 	let latestFacts: TachkaEvent | undefined;
@@ -39,6 +41,16 @@ export function startServer(tachka: Tachka, port: number): { close: () => void }
 			if(req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
 				res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
 				res.end(readFileSync(page));
+			}
+			else if(req.method === "GET" && req.url?.startsWith("/assets/")) {
+				const file = normalize(join(assetsDir, decodeURIComponent(req.url.slice("/assets/".length).split("?")[0] ?? "")));
+				const type = IMAGE_TYPES[file.slice(file.lastIndexOf("."))];
+				if(!file.startsWith(assetsDir) || !type || !existsSync(file))
+					res.writeHead(404).end();
+				else {
+					res.writeHead(200, { "content-type": type, "cache-control": "max-age=3600" });
+					res.end(readFileSync(file));
+				}
 			}
 			else if(req.method === "GET" && req.url === "/events") {
 				res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });

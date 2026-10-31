@@ -24,6 +24,11 @@ h1 { font: 700 20px/1 Georgia, serif; margin: 0; letter-spacing: .5px; color: va
 @keyframes pulse { 50% { opacity: .25; } }
 .res { display: flex; flex-wrap: wrap; gap: 6px; }
 .res span { font-variant-numeric: tabular-nums; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.icon { image-rendering: auto; vertical-align: middle; flex: none; }
+.res span { display: inline-flex; align-items: center; gap: 4px; }
+aside li:has(> img.icon) { display: flex; gap: 8px; align-items: flex-start; }
+.army { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; }
+.army > span { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
 .res b { font-weight: 600; margin-right: 4px; color: var(--muted); }
 .spacer { flex: 1; }
 button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
@@ -87,6 +92,16 @@ const short = s => String(s).replace(/^core:/, "");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let paused = false, lastDay = 0;
 
+// icons come from the user's own game data (npm run assets); without them the page shows text only
+let assets = { resources: [], creatures: [], heroes: {}, towns: [] };
+fetch("/assets/manifest.json").then(r => r.ok ? r.json() : assets).then(m => { assets = m; if (lastFacts) showFacts(lastFacts); }).catch(() => {});
+let lastFacts;
+const img = (path, title, size) => `<img class="icon" src="/assets/${path}" alt="" title="${esc(title)}" width="${size}" height="${size}">`;
+const resIcon = k => assets.resources.includes(k) ? img(`resources/${k}.png`, k, 22) : `<b>${esc(k)}</b>`;
+const creatureIcon = c => assets.creatures.includes(short(c).toLowerCase()) ? img(`creatures/${short(c).toLowerCase()}.png`, short(c), 28) : "";
+const heroIcon = name => assets.heroes[String(name).toLowerCase()] ? img(assets.heroes[String(name).toLowerCase()], name, 40) : "";
+const townIcon = faction => assets.towns.includes(short(faction)) ? img(`towns/${short(faction)}.png`, short(faction), 40) : "";
+
 function add(cls, html) {
   const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
   const el = document.createElement("div");
@@ -97,11 +112,12 @@ function status(text, busy) { const s = $("status"); s.textContent = text; s.cla
 function tokens(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
 
 function showFacts(f) {
+  lastFacts = f;
   lastDay = f.day;
   $("day").textContent = `Day ${f.day} · week ${f.week}`;
-  $("res").innerHTML = Object.entries(f.resources).map(([k, v]) => `<span><b>${k}</b>${v}${f.income && f.income[k] ? ` <span class="muted">${f.income[k] > 0 ? "+" : ""}${f.income[k]}</span>` : ""}</span>`).join("");
-  $("heroes").innerHTML = f.heroes.length ? "<ul>" + f.heroes.map(h => `<li><b>${esc(h.name)}</b> ${esc(short(h.class))} L${h.level} at ${h.pos.x},${h.pos.y} · move ${h.movement}<br><span class="muted">${h.army.map(a => a.count + " " + esc(short(a.creature))).join(", ") || "no army"} · A${h.primarySkills.attack} D${h.primarySkills.defense} P${h.primarySkills.spellPower} K${h.primarySkills.knowledge}</span></li>`).join("") + "</ul>" : "no heroes";
-  $("towns").innerHTML = f.towns.length ? "<ul>" + f.towns.map(t => `<li><b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings</span>${t.stock.length ? `<br><span class="muted">stock: ${t.stock.filter(s => s.available).map(s => s.available + " " + esc(short(s.creature))).join(", ") || "none"}</span>` : ""}</li>`).join("") + "</ul>" : "no towns";
+  $("res").innerHTML = Object.entries(f.resources).map(([k, v]) => `<span title="${esc(k)}">${resIcon(k)}${v}${f.income && f.income[k] ? ` <span class="muted">${f.income[k] > 0 ? "+" : ""}${f.income[k]}</span>` : ""}</span>`).join("");
+  $("heroes").innerHTML = f.heroes.length ? "<ul>" + f.heroes.map(h => `<li>${heroIcon(h.name)}<div><b>${esc(h.name)}</b> ${esc(short(h.class))} L${h.level} at ${h.pos.x},${h.pos.y} · move ${h.movement}<br><span class="army">${h.army.map(a => `<span title="${esc(short(a.creature))}">${creatureIcon(a.creature)}${a.count}${creatureIcon(a.creature) ? "" : " " + esc(short(a.creature))}</span>`).join("") || '<span class="muted">no army</span>'}</span><br><span class="muted">A${h.primarySkills.attack} D${h.primarySkills.defense} P${h.primarySkills.spellPower} K${h.primarySkills.knowledge}</span></div></li>`).join("") + "</ul>" : "no heroes";
+  $("towns").innerHTML = f.towns.length ? "<ul>" + f.towns.map(t => `<li>${townIcon(t.faction)}<div><b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings</span>${t.stock.length ? `<br><span class="army">${t.stock.filter(s => s.available).map(s => `<span title="${esc(short(s.creature))}">${creatureIcon(s.creature)}${s.available}${creatureIcon(s.creature) ? "" : " " + esc(short(s.creature))}</span>`).join("") || '<span class="muted">no stock</span>'}</span>` : ""}</div></li>`).join("") + "</ul>" : "no towns";
   $("blockers").innerHTML = f.blockers.length ? "<ul>" + f.blockers.map(b => `<li>${esc(short(b.building))} <span class="muted">short ${Object.entries(b.short).map(([k, v]) => v + " " + k).join(", ")} · ${b.suppliers.length ? "supply: " + esc(b.suppliers[0].site.name) + " (" + b.suppliers[0].site.turns + " turns)" : "no known supplier"}</span></li>`).join("") + "</ul>" : "nothing blocked";
   $("memory").innerHTML = f.memory ? `<div><b>Goal</b> ${esc(f.memory.goal)}</div><div><b>Next</b> ${esc(f.memory.next)}</div>${f.memory.deferred.length ? "<div><b>Deferred</b></div><ul>" + f.memory.deferred.map(d => `<li>${esc(d.what)} <span class="muted">- ${esc(d.unlock)}</span></li>`).join("") + "</ul>" : ""}${f.memory.watch ? `<div><b>Watch</b> ${esc(f.memory.watch)}</div>` : ""}` : "none yet";
   $("plan").innerHTML = f.plan ? `<div>${esc(f.plan.note || "")}</div><div class="muted">review by day ${f.plan.reviewByDay}</div><details><summary>full plan</summary><pre>${esc(JSON.stringify(f.plan, null, 1))}</pre></details>` : "none yet";

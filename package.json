@@ -9,7 +9,8 @@
     "console": "tsx src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "play": "tsx src/play.ts"
+    "play": "tsx src/play.ts",
+    "assets": "tsx tools/extract-assets.ts"
   },
   "type": "module",
   "devDependencies": {

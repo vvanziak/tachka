@@ -28,11 +28,14 @@ export class Tachka {
 	private inbox: string[] = [];
 	private paused = false;
 
+	private events: string[] = [];
+
 	constructor(options: BridgeOptions) {
 		this.bridge = new BridgeClient({
 			...options,
 			onExchange: exchange => {
 				options.onExchange?.(exchange);
+				this.collectEvents(exchange);
 				this.publish({ type: "exchange", exchange });
 			},
 		});
@@ -47,6 +50,24 @@ export class Tachka {
 	say(text: string): void {
 		this.inbox.push(text);
 		this.publish({ type: "chat", from: "human", text });
+	}
+
+	/** What the game reported since the last call: battle results, pickups, messages. */
+	drainEvents(): string[] {
+		const events = this.events;
+		this.events = [];
+		return events;
+	}
+
+	private collectEvents(exchange: Exchange): void {
+		const result = exchange.result as { events?: unknown; status?: { events?: unknown } } | undefined;
+		for(const list of [result?.events, result?.status?.events])
+			if(Array.isArray(list))
+				for(const e of list)
+					if(typeof e === "string" && e !== "your turn started" && !this.events.includes(e))
+						this.events.push(e.replace(/\r?\n+/g, " ").slice(0, 220));
+		if(this.events.length > 60)
+			this.events.splice(0, this.events.length - 60);
 	}
 
 	/** A line for the king's next brief that is not shown in the chat (what the talker already told the human). */

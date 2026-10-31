@@ -1,4 +1,5 @@
 import type { Brief } from "./king.js";
+import { PLAYER_COLORS } from "./protocol.js";
 import type { Resources } from "./state.js";
 
 const short = (key: string) => key.replace(/^core:/, "");
@@ -8,7 +9,7 @@ const money = (r: Partial<Resources>) => Object.entries(r).filter(([, v]) => v).
 export function renderBrief(brief: Brief): string {
 	const { facts } = brief;
 	const lines: string[] = [];
-	lines.push(`DAY ${facts.day} (week ${facts.week}, day ${facts.dayOfWeek} of the week)`);
+	lines.push(`DAY ${facts.day} (week ${facts.week}, day ${facts.dayOfWeek} of the week). You are ${facts.game.player ?? "?"}${facts.game.mapSize ? `, map ${facts.game.mapSize.x}x${facts.game.mapSize.y}, ${facts.game.mapSize.z} level(s)` : ""}.`);
 	lines.push(`Treasury: ${money(facts.resources)}`);
 	if(facts.incomeSinceLastTurn)
 		lines.push(`Change since our last turn ended: ${money(facts.incomeSinceLastTurn)}`);
@@ -28,8 +29,10 @@ export function renderBrief(brief: Brief): string {
 	}
 
 	lines.push("\nHEROES");
-	for(const h of facts.heroes)
-		lines.push(`- hero ${h.id} ${h.name} (${short(h.class)}, lvl ${h.level}) at ${h.pos.x},${h.pos.y},${h.pos.z} movement ${h.movement}; army: ${h.army.map(a => `${a.count} ${short(a.creature)}`).join(", ") || "none"}; ${Object.entries(h.primarySkills).map(([k, v]) => `${k} ${v}`).join(" ")}`);
+	for(const h of facts.heroes) {
+		const skills = (h.secondarySkills ?? []).map(k => `${short(k.skill)} ${k.level}`).join(", ");
+		lines.push(`- hero ${h.id} ${h.name} (${short(h.class)}, lvl ${h.level}${h.combatValue !== undefined ? `, combat value ${h.combatValue}` : ""}) at ${h.pos.x},${h.pos.y},${h.pos.z} movement ${h.movement}${h.movementLimit ? "/" + h.movementLimit : ""}; army: ${h.army.map(a => `${a.count} ${short(a.creature)}`).join(", ") || "none"}; ${Object.entries(h.primarySkills).map(([k, v]) => `${k} ${v}`).join(" ")}${skills ? "; skills: " + skills : ""}${h.mana !== undefined ? `; mana ${h.mana}` : ""}${h.spells?.length ? `; spells: ${h.spells.map(short).join(", ")}` : ""}`);
+	}
 
 	lines.push("\nREACHABLE SITES (nearest first; threat/ratio only for monsters; ratio is their strength against this hero)");
 	for(const h of facts.heroes) {
@@ -47,6 +50,15 @@ export function renderBrief(brief: Brief): string {
 	if(!facts.threats.length)
 		lines.push("none seen");
 
+	if(facts.rankings) {
+		lines.push("\nWHERE EVERYONE STANDS (Guild of Thieves; each list is first place first, tied players together)");
+		lines.push(JSON.stringify(facts.rankings));
+	}
+
+	lines.push("\nMINES");
+	lines.push(`owned: ${facts.mines.owned.map(m => `${m.name} at ${m.pos.x},${m.pos.y}`).join("; ") || "none"}`);
+	lines.push(`others known: ${facts.mines.others.slice(0, 20).map(m => `${m.name} at ${m.pos.x},${m.pos.y} (${m.owner < 0 ? "unowned" : PLAYER_COLORS[m.owner] ?? m.owner})`).join("; ") || "none"}`);
+
 	lines.push("\nBLOCKED BUILDINGS");
 	for(const b of brief.blockers)
 		lines.push(`- town ${b.town} ${short(b.building)} short ${money(b.short)}; suppliers: ${b.suppliers.map(s => `${s.resource} at ${s.site.name} (${s.site.id}, ${s.site.turns} turns)`).join(", ") || "NONE KNOWN"}`);
@@ -61,6 +73,12 @@ export function renderBrief(brief: Brief): string {
 		lines.push(`- day ${e.day}: ${e.note} | built ${e.built.map(b => short(b.building)).join(",") || "-"} | moves ${e.moves.map(m => `hero ${m.hero} ${m.intent}${m.reached ? " (done)" : m.stopped ? ` (${m.stopped})` : ""}`).join("; ") || "-"}`);
 	if(!brief.journal.length)
 		lines.push("(first turn)");
+
+	if(brief.events.length) {
+		lines.push("\nWHAT THE GAME REPORTED SINCE YOUR LAST BRIEF");
+		for(const e of brief.events.slice(-30))
+			lines.push(`- ${e}`);
+	}
 
 	lines.push("\nTHINGS THAT WENT WRONG OR NEED YOU LAST TURN");
 	lines.push(brief.deviations.length ? brief.deviations.map(d => JSON.stringify(d)).join("\n") : "none");

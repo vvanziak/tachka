@@ -1,4 +1,5 @@
 import { BridgeError, type BridgeClient } from "./bridge.js";
+import { PLAYER_COLORS } from "./protocol.js";
 import { RESOURCES, type Buildable, type GameState, type Hero, type Recruitable, type Resources, type Town } from "./state.js";
 
 export interface BuildOption extends Buildable {
@@ -39,6 +40,19 @@ export interface EconomyFacts {
 	heroes: Hero[];
 	/** Visible heroes and towns of other players with their strength against our strongest hero. */
 	threats: Array<Record<string, unknown>>;
+	/** Our colour and the map size. */
+	game: { player: string | undefined; mapSize: { x: number; y: number; z: number } | undefined };
+	/** Mines we own and the other mines we know of. */
+	mines: { owned: MineInfo[]; others: MineInfo[] };
+	/** Guild of Thieves intel on every player (rankings by towns, heroes, gold, army, income...), when a tavern exists. */
+	rankings: unknown;
+}
+
+export interface MineInfo {
+	name: string;
+	subtype: string;
+	pos: { x: number; y: number; z: number };
+	owner: number;
 }
 
 interface StateWithCalendar extends GameState {
@@ -78,7 +92,8 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 	}
 
 	const income = previousEnd && Object.fromEntries(RESOURCES.map(r => [r, state.resources[r] - previousEnd[r]])) as Resources;
-	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns, heroes: state.heroes, threats: await collectThreats(bridge, state.heroes[0]?.id) };
+	return { day: state.day, week: state.week, dayOfWeek: state.dayOfWeek, resources: state.resources, incomeSinceLastTurn: income, towns, heroes: state.heroes, threats: await collectThreats(bridge, state.heroes[0]?.id),
+		game: { player: state.player, mapSize: state.mapSize }, mines: minesOf(state), rankings: await collectRankings(bridge, state.towns.find(t => t.buildings.includes("core:tavern"))?.id) };
 }
 
 async function collectThreats(bridge: BridgeClient, hero: number | undefined): Promise<Array<Record<string, unknown>>> {
@@ -89,6 +104,25 @@ async function collectThreats(bridge: BridgeClient, hero: number | undefined): P
 	catch(e) {
 		if(e instanceof BridgeError)
 			return [];
+		throw e;
+	}
+}
+
+function minesOf(state: StateWithCalendar): { owned: MineInfo[]; others: MineInfo[] } {
+	const me = state.player ? PLAYER_COLORS.indexOf(state.player as (typeof PLAYER_COLORS)[number]) : -99;
+	const mines = (state.visibleObjects ?? []).filter(o => o.type === "mine").map(o => ({ name: o.name, subtype: o.subtype, pos: o.pos, owner: o.owner }));
+	return { owned: mines.filter(m => m.owner === me), others: mines.filter(m => m.owner !== me) };
+}
+
+async function collectRankings(bridge: BridgeClient, town: number | undefined): Promise<unknown> {
+	if(town === undefined)
+		return undefined;
+	try {
+		return await bridge.call("thieves_guild", { town });
+	}
+	catch(e) {
+		if(e instanceof BridgeError)
+			return undefined;
 		throw e;
 	}
 }

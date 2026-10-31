@@ -14,7 +14,7 @@ function town(id: number, extra: Partial<TownFacts> = {}): TownFacts {
 	return { id, name: `T${id}`, faction: "core:inferno", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], ...extra };
 }
 function facts(towns: TownFacts[], gold: number, extra: Partial<Resources> = {}): EconomyFacts {
-	return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold, ...extra }), incomeSinceLastTurn: undefined, towns, heroes: [], threats: [] };
+	return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold, ...extra }), incomeSinceLastTurn: undefined, towns, heroes: [], threats: [], game: { player: "red", mapSize: undefined }, mines: { owned: [], others: [] }, rankings: undefined };
 }
 
 let cleanup: Array<() => unknown> = [];

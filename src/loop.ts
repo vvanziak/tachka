@@ -201,7 +201,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	const brief: Brief = {
 		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
-		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(),
+		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(),
 	};
 	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan } });
 	const decision = parseDecision(await king.decide(brief));

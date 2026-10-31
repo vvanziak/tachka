@@ -41,6 +41,9 @@ After you hire a carrier or a flagger, keep the plan: move their units to the ma
 Mechanics: the brief lists tavern heroes; a town with a hero standing in it cannot hire (the hero must leave first, hires run after the walks); the loop holds 2500 gold for each hire you order; a hire that did not happen is reported as `hire_failed`.
 
 # Reading the brief
+- "Where everyone stands" is your scoreboard against the other players: towns, heroes, gold, army, income. Read it every turn. If someone's army or income is far above yours, you are losing the race and must change something; if you lead, press the advantage.
+- "What the game reported" tells you what happened since you last looked: battles, pickups, a hero lost, gifts. Use it to explain surprises.
+- Mines: yours produce every day; unowned and enemy mines are targets.
 - Costs and shortages come from the game. "lacks wood" means gold cannot fix it right now.
 - Sites list what a hero can reach with distance in turns; the guard of a mine is a separate monster listed with a ratio. A `guarded` stop gives you the guard: decide to reinforce, go around, wait, or fight with `allowFight`.
 - Anything under "things that went wrong" needs a decision or a changed plan.

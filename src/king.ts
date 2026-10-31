@@ -42,6 +42,8 @@ export interface Brief {
 	journal: JournalEntry[];
 	deviations: unknown[];
 	messages: string[];
+	/** What the game reported since the last brief. */
+	events: string[];
 }
 
 export interface King {

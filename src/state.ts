@@ -37,6 +37,23 @@ export interface Hero {
 	movement: number;
 	army: Array<{ creature: string; count: number; slot: number }>;
 	primarySkills: Record<string, number>;
+	secondarySkills?: Array<{ skill: string; level: number }>;
+	spells?: string[];
+	mana?: number;
+	exp?: number;
+	/** The engine's combat value of the hero with its army. */
+	combatValue?: number;
+	movementLimit?: number;
+}
+
+export interface MapObject {
+	id: number;
+	type: string;
+	subtype: string;
+	name: string;
+	pos: { x: number; y: number; z: number };
+	owner: number;
+	size?: string;
 }
 
 export interface GameState {
@@ -44,6 +61,9 @@ export interface GameState {
 	resources: Resources;
 	towns: Town[];
 	heroes: Hero[];
+	player?: string;
+	mapSize?: { x: number; y: number; z: number };
+	visibleObjects?: MapObject[];
 }
 
 export function canAfford(have: Resources, cost: Resources): boolean {

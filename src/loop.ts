@@ -145,8 +145,13 @@ async function answerQuestions(deps: LoopDeps, questions: Question[], deviations
 /** Answers dialogs until none is open: an answer can open the next one (a Tree of Knowledge level-up, for instance). */
 async function settleQuestions(deps: LoopDeps, deviations: unknown[], env: AnswerEnv = {}): Promise<boolean> {
 	for(let round = 0; round < 8; round++) {
-		const status = await deps.tachka.bridge.call<{ pendingQuestions?: Question[] }>("status");
+		const status = await deps.tachka.bridge.call<{ pendingQuestions?: Question[]; battle?: boolean }>("status");
 		const open = status.pendingQuestions ?? [];
+		// answering a dialog can start a fight; no command may be sent until it is fought out
+		if(status.battle) {
+			await deps.tachka.bridge.call("battle_act", { action: "autofight" });
+			continue;
+		}
 		if(open.length === 0)
 			return true;
 		if(!await answerQuestions(deps, open, deviations, env))
@@ -347,8 +352,20 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		if(!heroes.some(x => x.id === h.hero))
 			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
 	}
-	for(const m of decision.merge)
-		await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
+	if(decision.merge.length > 0) {
+		// the server refuses stack changes between objects that are not together; check first and tell the king
+		const now = await bridge.call<{ heroes: Hero[]; towns: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 });
+		const where = new Map<number, Pos>([...now.heroes.map(h => [h.id, h.pos] as const), ...now.towns.map(t => [t.id, t.pos] as const)]);
+		for(const m of decision.merge) {
+			const a = where.get(m.from);
+			const b = where.get(m.to);
+			if(!a || !b || a.z !== b.z || Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) > 1) {
+				deviations.push({ kind: "merge_not_together", from: m.from, to: m.to, fromPos: a, toPos: b, hint: "a hero must be in the town, or two heroes on adjacent tiles; walk there first" });
+				continue;
+			}
+			await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
+		}
+	}
 
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,

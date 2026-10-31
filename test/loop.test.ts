@@ -457,3 +457,58 @@ describe("leftover movement", () => {
 		expect(walked).toEqual([{ x: 9, y: 9 }]);
 	});
 });
+
+describe("commands that would make the server complain", () => {
+	async function turnWith(decisionExtra: object, handler: (cmd: string, args: any, calls: string[]) => unknown) {
+		const calls: string[] = [];
+		const fixed: Record<string, unknown> = { get_buildable: [], get_tavern: [], threats: { enemies: [] } };
+		const server = await startFakeBridge((cmd, args) => { calls.push(cmd); return cmd in fixed ? fixed[cmd] : handler(cmd, args, calls); });
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { decide: async () => ({ note: "n", missions: [], hire: [], merge: [], hold: [], ...decisionExtra }) };
+		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
+		return { calls, entry: journal.tail(3, 1)[0] };
+	}
+	const state = (heroPos: { x: number; y: number; z: number }) => ({
+		day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 100 }),
+		towns: [{ id: 1, name: "Home", faction: "core:inferno", pos: { x: 5, y: 5, z: 0 }, builtThisTurn: false, visitingHero: -1, garrisonHero: -1, buildings: [], recruitable: [], army: [] }],
+		heroes: [{ id: 9, name: "H", class: "", level: 1, pos: heroPos, movement: 0, army: [], primarySkills: {} }],
+	});
+
+	it("does not send a merge between a town and a hero that is away, and tells the king", async () => {
+		const { calls, entry } = await turnWith({ merge: [{ from: 1, to: 9 }] }, cmd => cmd === "get_state" ? state({ x: 20, y: 20, z: 0 }) : cmd === "status" ? { pendingQuestions: [] } : cmd === "wait_for_turn" ? { yourTurn: true, battle: false } : {});
+		expect(calls).not.toContain("move_army");
+		expect(entry?.deviations).toContainEqual(expect.objectContaining({ kind: "merge_not_together", from: 1, to: 9 }));
+	});
+
+	it("sends a merge when the hero stands in the town", async () => {
+		const { calls } = await turnWith({ merge: [{ from: 1, to: 9 }] }, cmd => cmd === "get_state" ? state({ x: 5, y: 5, z: 0 }) : cmd === "status" ? { pendingQuestions: [] } : cmd === "wait_for_turn" ? { yourTurn: true, battle: false } : {});
+		expect(calls).toContain("move_army");
+	});
+
+	it("fights the battle an answered dialog started before sending any walk", async () => {
+		let answered = false;
+		let fought = false;
+		let moved = false;
+		const order: string[] = [];
+		await turnWith({ missions: [{ hero: 9, target: { x: 9, y: 9, z: 0 }, intent: "go" }] }, (cmd, args) => {
+			order.push(cmd);
+			switch(cmd) {
+			case "get_state": return state({ x: 5, y: 5, z: 0 });
+			case "targets": return [];
+			case "move_hero": moved = true; return fought
+				? { reached: true, pos: { x: 9, y: 9, z: 0 }, movement: 0, status: { pendingQuestions: [] } }
+				: { reached: false, stopped: "question pending", pos: { x: 8, y: 8, z: 0 }, movement: 100, status: { pendingQuestions: [{ id: 3, kind: "dialog", text: "Do you want to attack?" }] } };
+			case "status": return { pendingQuestions: !moved || answered || fought ? [] : [{ id: 3, kind: "dialog", text: "Do you want to attack?" }], battle: moved && answered && !fought };
+			case "answer_question": answered = true; return {};
+			case "battle_act": fought = true; return { battleOver: true };
+			case "wait_for_turn": return { yourTurn: true, battle: false };
+			default: return {};
+			}
+		});
+		const walks = order.map((c, i) => c === "move_hero" ? i : -1).filter(i => i >= 0);
+		expect(order.indexOf("battle_act")).toBeGreaterThan(-1);
+		expect(walks[1]).toBeGreaterThan(order.indexOf("battle_act"));
+	});
+});

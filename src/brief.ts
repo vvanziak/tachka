@@ -1,4 +1,5 @@
 import type { Brief } from "./king.js";
+import { fightCandidates } from "./missions.js";
 import { PLAYER_COLORS } from "./protocol.js";
 import type { Resources } from "./state.js";
 
@@ -56,6 +57,16 @@ export function renderBrief(brief: Brief): string {
 			lines.push(`  ${s.id} ${s.name} [${s.type}${s.subtype ? "/" + s.subtype : ""}] at ${s.pos.x},${s.pos.y},${s.pos.z} turns ${s.turns} steps ${s.steps}${s.threat ? ` threat "${s.threat}" size ${s.size} ratio ${s.strengthRatio}` : ""}${s.visitedByHero ? " [this hero has visited]" : s.visitedByUs ? " [we have visited]" : ""}`);
 		if(!sites.length)
 			lines.push("  (nothing reachable and unvisited is known)");
+	}
+
+	lines.push("\nFIGHT CANDIDATES (monster stacks each hero can reach, easiest first; ratio is their strength against that hero, below 1 means the hero is stronger; \"behind\" is what stands next to the stack)");
+	for(const h of facts.heroes) {
+		const fights = fightCandidates(brief.sites[h.id] ?? []).slice(0, 6);
+		if(!fights.length)
+			continue;
+		lines.push(`hero ${h.id}:`);
+		for(const { guard: g, behind } of fights)
+			lines.push(`  ${g.id} ${g.name} size ${g.size} threat "${g.threat}" ratio ${g.strengthRatio} turns ${g.turns} at ${g.pos.x},${g.pos.y}; behind: ${behind.map(b => `${b.name}${b.visitedByUs ? " (visited)" : ""}`).join(", ") || "nothing seen"}`);
 	}
 
 	lines.push("\nVISIBLE OTHER PLAYERS' HEROES AND TOWNS (ratio = their strength against our strongest hero; a town with no hero in it and no army is empty and can be taken)");

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BridgeClient } from "../src/bridge.js";
-import { collectSites, goTo } from "../src/missions.js";
+import { collectSites, fightCandidates, goTo, type Site } from "../src/missions.js";
 import { startFakeBridge } from "./fakeBridge.js";
 
 let cleanup: Array<() => unknown> = [];
@@ -41,5 +41,16 @@ describe("collectSites", () => {
 		const { bridge, calls } = await connect(() => sites);
 		expect(await collectSites(bridge, 7, 10)).toEqual(sites);
 		expect(calls[0]).toEqual({ cmd: "targets", args: { hero: 7, limit: 10 } });
+	});
+});
+
+describe("fightCandidates", () => {
+	const site = (id: number, type: string, x: number, ratio?: number): Site => ({ id, type, subtype: type, name: `${type}${id}`, pos: { x, y: 0, z: 0 }, owner: -2, steps: x, turns: 1, strengthRatio: ratio, threat: ratio === undefined ? undefined : "t", size: "1-4" });
+
+	it("lists the easiest stacks first and names what stands next to them", () => {
+		const found = fightCandidates([site(1, "monster", 10, 0.9), site(2, "monster", 20, 0.2), site(3, "mine", 21), site(4, "chest", 40)]);
+		expect(found.map(f => f.guard.id)).toEqual([2, 1]);
+		expect(found[0]?.behind.map(b => b.id)).toEqual([3]);
+		expect(found[1]?.behind).toEqual([]);
 	});
 });

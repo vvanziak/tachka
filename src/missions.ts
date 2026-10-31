@@ -24,6 +24,21 @@ export interface Site {
 	visitedByUs?: boolean;
 }
 
+export interface FightCandidate {
+	guard: Site;
+	/** Other objects within two tiles of the stack: what it most likely guards. */
+	behind: Site[];
+}
+
+/** Monster stacks the hero can reach, easiest first (lowest strength ratio), each with the objects standing next to it. */
+export function fightCandidates(sites: Site[]): FightCandidate[] {
+	const near = (a: Pos, b: Pos) => a.z === b.z && Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) <= 2;
+	return sites
+		.filter(s => s.type === "monster" && s.strengthRatio !== undefined)
+		.map(guard => ({ guard, behind: sites.filter(o => o.type !== "monster" && near(o.pos, guard.pos)) }))
+		.sort((a, b) => (a.guard.strengthRatio ?? 0) - (b.guard.strengthRatio ?? 0));
+}
+
 export interface MoveOutcome {
 	reached: boolean;
 	pos: Pos;

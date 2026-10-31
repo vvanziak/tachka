@@ -363,3 +363,20 @@ describe("hiring", () => {
 		expect(entry?.orders?.hire).toEqual([{ town: 1, hero: 77, why: "flag the far mines in the east" }]);
 	});
 });
+
+describe("nextTurn at the end of the game", () => {
+	it("returns instead of waiting forever when the bridge reports game over", async () => {
+		let waits = 0;
+		const server = await startFakeBridge(cmd => {
+			if(cmd === "wait_for_turn") {
+				waits++;
+				return { yourTurn: false, battle: false, gameOver: true };
+			}
+			return {};
+		});
+		const tachka = new Tachka({ port: server.port });
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		expect(await nextTurn(tachka.bridge)).toBe(false);
+		expect(waits).toBe(1);
+	});
+});

@@ -1,5 +1,6 @@
 import { BridgeError } from "./bridge.js";
 import { collectBlockers } from "./blockers.js";
+import { reviewDecision } from "./review.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parsePlan } from "./plan.js";
 import { defaultPlan } from "./defaultPlan.js";
@@ -206,7 +207,17 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(), memory: state.memory,
 	};
 	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
-	const decision = parseDecision(await king.decide(brief));
+	let decision = parseDecision(await king.decide(brief));
+	// the checks run on the first decision; the king gets one round to fix it or to say why the finding does not apply
+	const findings = reviewDecision(brief, decision);
+	let revised = false;
+	if(findings.length > 0 && king.revise) {
+		const before = JSON.stringify(decision);
+		decision = parseDecision(await king.revise(brief, decision, findings));
+		revised = JSON.stringify(decision) !== before;
+	}
+	if(findings.length > 0)
+		tachka.publish({ type: "review", findings: findings.map(f => f.text), revised });
 	const usage = king.usage?.();
 	tachka.publish({ type: "king", note: decision.note, usage: usage?.last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }, total: usage?.total ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }, ms: usage?.ms ?? 0 });
 	if(decision.reply)
@@ -288,6 +299,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,
 		orders: { hire: decision.hire, merge: decision.merge },
+		review: findings.length ? { findings: findings.map(f => f.code), revised } : undefined,
 	});
 	state.deviations = deviations;
 	const entry = journal.tail(facts.day, 1).at(-1);

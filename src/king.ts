@@ -5,6 +5,7 @@ import type { EconomyFacts } from "./facts.js";
 import type { JournalEntry } from "./journal.js";
 import type { Pos, Site } from "./missions.js";
 import { planSchema, type Plan } from "./plan.js";
+import type { Finding } from "./review.js";
 import { defaultAnswer, type AnswerContext, type Question } from "./questions.js";
 import type { KingUsage } from "./core.js";
 
@@ -91,6 +92,8 @@ export interface King {
 	decide(brief: Brief): Promise<Decision>;
 	/** Choice for a dialog; undefined stops the game loop. */
 	answer?(question: Question, context?: AnswerContext): number | undefined;
+	/** One more look at a decision after the checks in review.ts found problems; returns the decision to carry out. */
+	revise?(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision>;
 	/** Cost of the last decision and the running total, for kings that call a model. */
 	usage?(): { last: KingUsage; total: KingUsage; ms: number };
 }

@@ -118,6 +118,7 @@ function handle(e) {
     case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
     case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
     case "status": status(e.text, false); add("turn", esc(e.text)); break;
+    case "review": add("thought", `<b>Review</b> ${e.revised ? "(changed the move)" : "(kept the move)"}<br>${e.findings.map(esc).join("<br>")}`); break;
     case "query": add("thought", `asked the game: ${esc(e.text)}`); break;
     case "typing": {
       let el = $("typing");

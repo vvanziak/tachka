@@ -5,6 +5,7 @@ import type { Brain } from "./brain.js";
 import { renderBrief } from "./brief.js";
 import type { KingUsage } from "./core.js";
 import { parseDecision, replySchema, type Brief, type Decision, type King, type Query } from "./king.js";
+import type { Finding } from "./review.js";
 import { defaultAnswer, type AnswerContext, type Question } from "./questions.js";
 
 const SYSTEM = readFileSync(join(import.meta.dirname, "..", "prompts", "king.md"), "utf8");
@@ -78,6 +79,23 @@ export class LlmKing implements King {
 		}
 		this.ms = Date.now() - started;
 		return { note: `The king could not decide (${lastError.slice(0, 200)}); the current plan keeps running and heroes stand still.`, missions: [], hire: [], merge: [] };
+	}
+
+	async revise(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision> {
+		const prompt = `${renderBrief(brief)}\n\nYOUR DECISION SO FAR\n${JSON.stringify(decision)}\n\nCHECKS FOUND THESE PROBLEMS WITH IT\n${findings.map(f => `- ${f.text}`).join("\n")}\n\nFix what is real. If a finding does not apply, keep the decision and say in \`note\` why. Leave \`ask\` empty and answer with the full decision.`;
+		try {
+			const reply = await this.brain.complete(SYSTEM, prompt, this.schema);
+			for(const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
+				this.last[key] += reply.usage[key];
+				this.total[key] += reply.usage[key];
+			}
+			const parsed = replySchema.parse(reply.json);
+			return parsed.decision ? parseDecision(parsed.decision) : decision;
+		}
+		catch(e) {
+			this.options.onProblem?.(`the king could not revise its decision, keeping it: ${e instanceof Error ? e.message : String(e)}`);
+			return decision;
+		}
 	}
 
 	private async answerQueries(queries: Query[], round: number): Promise<string> {

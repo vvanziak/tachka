@@ -55,7 +55,7 @@ describe("playTurn", () => {
 			case "get_state":
 				return {
 					day: 2, week: 1, dayOfWeek: 2, resources: res({ gold: 3000, ore: 10 }),
-					towns: [{ id: 11, name: "T", faction: "core:inferno", builtThisTurn: false, visitingHero: 5, garrisonHero: -1, buildings: [], recruitable: [] }],
+					towns: [{ id: 11, name: "T", faction: "core:inferno", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, visitingHero: 5, garrisonHero: -1, buildings: [], recruitable: [] }],
 					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 1500, army: [], primarySkills: {} }],
 				};
 			case "get_buildable":
@@ -379,4 +379,38 @@ describe("nextTurn at the end of the game", () => {
 		expect(await nextTurn(tachka.bridge)).toBe(false);
 		expect(waits).toBe(1);
 	});
+});
+
+describe("review round", () => {
+  it("asks the king to revise when the checks find a problem and carries out the revised decision", async () => {
+    const calls: string[] = [];
+    const server = await startFakeBridge(cmd => {
+      calls.push(cmd);
+      switch(cmd) {
+      case "get_state":
+        return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 100 }), towns: [{ id: 1, name: "Home", faction: "core:inferno", pos: { x: 5, y: 5, z: 0 }, builtThisTurn: false, visitingHero: -1, garrisonHero: -1, buildings: [], recruitable: [], army: [] }], heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 5, y: 5, z: 0 }, movement: 1500, army: [], primarySkills: {} }] };
+      case "targets":
+        return [site(62, "mine", "sawmill", "Sawmill", 0)];
+      case "get_buildable":
+        return [];
+      case "status":
+        return { pendingQuestions: [] };
+      case "wait_for_turn":
+        return { yourTurn: true, battle: false };
+      default:
+        return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 1, status: { pendingQuestions: [] } };
+      }
+    });
+    const tachka = new Tachka({ port: server.port });
+    const reviews: boolean[] = [];
+    tachka.subscribe(e => e.type === "review" && reviews.push(e.revised));
+    const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+    cleanup.push(() => tachka.bridge.close(), server.close);
+    const leave = { note: "go", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "sawmill" }], hire: [], merge: [] };
+    const king = { decide: async () => leave, revise: async () => ({ note: "stay and recruit", missions: [], hire: [], merge: [] }) };
+    await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
+    expect(reviews).toEqual([true]);
+    expect(calls).not.toContain("move_hero");
+    expect(journal.tail(3, 1)[0]?.review).toEqual({ findings: ["empty_town"], revised: true });
+  });
 });

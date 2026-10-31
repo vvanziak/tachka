@@ -27,6 +27,8 @@ export interface TownFacts {
 	recruitable: Recruitable[];
 	/** Heroes that can be hired here (empty without a tavern). */
 	tavern: TavernHero[];
+	/** Units standing in the town's own garrison. */
+	garrison: number;
 }
 
 export interface EconomyFacts {
@@ -88,6 +90,7 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 			options: options.map(o => ({ ...o, missing: missingResources(state.resources, o.cost) })),
 			recruitable: town.recruitable,
 			tavern,
+			garrison: (town.army ?? []).reduce((n, a) => n + a.count, 0),
 		});
 	}
 

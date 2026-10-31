@@ -11,7 +11,7 @@ const option = (building: string, cost: Partial<Resources>, state = "allowed") =
 const stock = (level: number, creature: string, available: number, gold: number) => ({ level, creature, name: creature, available, cost: res({ gold }) });
 
 function town(id: number, extra: Partial<TownFacts> = {}): TownFacts {
-	return { id, name: `T${id}`, faction: "core:inferno", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], ...extra };
+	return { id, name: `T${id}`, faction: "core:inferno", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], garrison: 0, ...extra };
 }
 function facts(towns: TownFacts[], gold: number, extra: Partial<Resources> = {}): EconomyFacts {
 	return { day: 3, week: 1, dayOfWeek: 3, resources: res({ gold, ...extra }), incomeSinceLastTurn: undefined, towns, heroes: [], threats: [], game: { player: "red", mapSize: undefined }, mines: { owned: [], others: [] }, rankings: undefined };

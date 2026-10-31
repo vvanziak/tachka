@@ -16,6 +16,7 @@ export type TachkaEvent =
 	| { type: "status"; text: string }
 	| { type: "typing"; on: boolean }
 	| { type: "query"; text: string }
+	| { type: "review"; findings: string[]; revised: boolean }
 	| { type: "final"; final: unknown }
 	| { type: "paused" }
 	| { type: "resumed" };

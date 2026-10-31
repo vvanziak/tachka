@@ -12,6 +12,8 @@ export interface JournalEntry {
 	deviations: unknown[];
 	/** What the king ordered besides the economy plan and the walks. */
 	orders?: { hire: unknown[]; merge: unknown[] };
+	/** What the checks found in the first decision and whether the king changed it. */
+	review?: { findings: string[]; revised: boolean };
 }
 
 /** One JSON line per turn. The king sees only the last few days; the file keeps everything. */

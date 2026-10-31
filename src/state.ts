@@ -19,6 +19,7 @@ export interface Town {
 	garrisonHero: number;
 	buildings: string[];
 	recruitable: Recruitable[];
+	army?: Array<{ creature: string; count: number }>;
 }
 
 export interface Buildable {

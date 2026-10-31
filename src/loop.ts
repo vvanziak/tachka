@@ -5,9 +5,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parsePlan } from "./plan.js";
 import { defaultPlan } from "./defaultPlan.js";
 import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
-import { collectFacts } from "./facts.js";
+import { collectFacts, type EconomyFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
-import { parseDecision, type Brief, type King, type Memory } from "./king.js";
+import { parseDecision, type Decision, type Brief, type King, type Memory } from "./king.js";
 import { collectSites, goTo, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
@@ -183,6 +183,54 @@ function mergeSites(perHero: Record<number, Site[]>): Site[] {
 	return [...best.values()];
 }
 
+const MOVEMENT_LEFT_TO_KEEP_GOING = 0.25;
+const MAX_EXTRA_WALKS = 4;
+
+/**
+ * Movement points do not carry over to the next day, so a hero that stops with most of them left wastes the day.
+ * Unless the king holds it, it walks on to the nearest unvisited, unguarded site for as long as a quarter of the day remains.
+ */
+async function useLeftoverMovement(deps: LoopDeps, state: LoopState, facts: EconomyFacts, decision: Decision, remaining: Map<number, { movement: number; pos: Pos; blocked: boolean }>, moves: JournalEntry["moves"], deviations: unknown[]): Promise<boolean> {
+	const bridge = deps.tachka.bridge;
+	const visitedNow = new Set<string>();
+	for(const hero of facts.heroes) {
+		if(decision.hold.includes(hero.id))
+			continue;
+		let at = remaining.get(hero.id) ?? { movement: hero.movement, pos: hero.pos, blocked: false };
+		const limit = hero.movementLimit ?? hero.movement;
+		for(let walk = 0; walk < MAX_EXTRA_WALKS && !at.blocked && at.movement >= MOVEMENT_LEFT_TO_KEEP_GOING * limit; walk++) {
+			// a hero alone in an undefended town is its defender
+			if(facts.towns.some(t => t.pos.x === at.pos.x && t.pos.y === at.pos.y && t.pos.z === at.pos.z && t.garrison === 0 && !facts.heroes.some(h => h.id !== hero.id && h.pos.x === t.pos.x && h.pos.y === t.pos.y)))
+				break;
+			const sites = (await collectSites(bridge, hero.id, 25)).filter(s => !s.threat && !s.visitedByHero && !s.visitedByUs && s.turns <= 1 && !visitedNow.has(`${s.pos.x},${s.pos.y},${s.pos.z}`));
+			const next = sites[0];
+			if(!next)
+				break;
+			visitedNow.add(`${next.pos.x},${next.pos.y},${next.pos.z}`);
+			let outcome: MoveOutcome;
+			try {
+				outcome = await goTo(bridge, hero.id, next.pos);
+				for(let resume = 0; resume < 3 && outcome.pendingQuestions.length > 0; resume++) {
+					if(!await settleQuestions(deps, deviations, { hero: hero.id, reserved: state.plan ? reservedTotal(state.plan.reserves) : undefined }))
+						return false;
+					outcome = await goTo(bridge, hero.id, next.pos);
+				}
+			}
+			catch(e) {
+				if(!(e instanceof BridgeError))
+					throw e;
+				deviations.push({ kind: "rejected", action: `extra walk of hero ${hero.id}`, error: e.message });
+				break;
+			}
+			moves.push({ hero: hero.id, target: next.pos, intent: `(automatic, movement left) ${next.name}`, reached: outcome.reached || outcome.visited === true, stopped: outcome.stopped });
+			if(outcome.stopped === "guarded")
+				deviations.push({ kind: "guarded", hero: hero.id, guard: outcome.guard, intent: `(automatic) ${next.name}` });
+			at = { movement: outcome.movement, pos: outcome.pos, blocked: outcome.stopped !== undefined && outcome.stopped !== "not enough movement points this turn" };
+		}
+	}
+	return true;
+}
+
 /** One turn: gather facts, ask the king, carry the decision out, record it. Returns false when the loop must stop. */
 export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolean> {
 	const { tachka, king, journal } = deps;
@@ -250,6 +298,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	}
 
 	const moves: JournalEntry["moves"] = [];
+	const remaining = new Map<number, { movement: number; pos: Pos; blocked: boolean }>();
 	for(const mission of decision.missions) {
 		// a dialog (chest, level-up) interrupts the walk; after answering it the same mission resumes
 		let outcome: MoveOutcome;
@@ -280,8 +329,14 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 			continue;
 		}
 		moves.push({ hero: mission.hero, target: mission.target, intent: mission.intent, reached: outcome.reached || outcome.visited === true, stopped: outcome.stopped });
+		remaining.set(mission.hero, { movement: outcome.movement, pos: outcome.pos, blocked: outcome.stopped !== undefined && outcome.stopped !== "not enough movement points this turn" });
 		if(outcome.stopped === "guarded")
 			deviations.push({ kind: "guarded", hero: mission.hero, guard: outcome.guard, intent: mission.intent });
+	}
+
+	if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {
+		state.deviations = deviations;
+		return false;
 	}
 
 	// after the walks: a town with a hero standing in it cannot hire, so heroes leave first

@@ -66,7 +66,7 @@ describe("playTurn", () => {
 			case "targets":
 				return [site(62, "mine", "sawmill", "Sawmill", 0), site(70, "monster", "familiar", "Familiars", 0, { threat: "weak" })];
 			case "move_hero":
-				return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 900, status: { pendingQuestions: [] } };
+				return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 100, status: { pendingQuestions: [] } };
 			case "wait_for_turn":
 				return { yourTurn: true, battle: false };
 			default:
@@ -109,11 +109,11 @@ describe("dialogs during a mission", () => {
 				return {};
 			case "move_hero":
 				if(answered.length === 0)
-					return { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 900, status: { pendingQuestions: [{ id: 23, kind: "dialog" }] } };
+					return { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 100, status: { pendingQuestions: [{ id: 23, kind: "dialog" }] } };
 				if(answered.length < 2)
 					throw Object.assign(new Error("answer pending question 24 first (answer_question)"), { name: "BridgeError" });
 				moves++;
-				return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } };
+				return { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 100, status: { pendingQuestions: [] } };
 			case "answer_question":
 				answered.push(args.id);
 				return {};
@@ -165,8 +165,8 @@ describe("a fight during a mission", () => {
 				return { pendingQuestions: [] };
 			case "move_hero":
 				return fought
-					? { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } }
-					: { reached: false, stopped: "battle waiting for orders", pos: { x: 3, y: 3, z: 0 }, movement: 900, status: { pendingQuestions: [] } };
+					? { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 100, status: { pendingQuestions: [] } }
+					: { reached: false, stopped: "battle waiting for orders", pos: { x: 3, y: 3, z: 0 }, movement: 100, status: { pendingQuestions: [] } };
 			case "battle_act":
 				fought = true;
 				return { battleOver: true };
@@ -233,8 +233,8 @@ describe("recruiting at a dwelling on the map", () => {
 				return [site(62, "creatureGeneratorCommon", "", "Monastery", 0)];
 			case "move_hero":
 				return phase === 0
-					? { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 900, status: { pendingQuestions: [{ id: 1, kind: "dialog", text: "{Monastery}\n\nWould you like to recruit Monks?" }] } }
-					: { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 800, status: { pendingQuestions: [] } };
+					? { reached: false, stopped: "question pending", pos: { x: 0, y: 0, z: 0 }, movement: 100, status: { pendingQuestions: [{ id: 1, kind: "dialog", text: "{Monastery}\n\nWould you like to recruit Monks?" }] } }
+					: { reached: true, pos: { x: 62, y: 62, z: 0 }, movement: 100, status: { pendingQuestions: [] } };
 			case "status":
 				return { pendingQuestions: phase === 0 && calls.some(c => c.cmd === "move_hero")
 					? [{ id: 1, kind: "dialog", text: "{Monastery}\n\nWould you like to recruit Monks?" }]
@@ -356,7 +356,7 @@ describe("hiring", () => {
 		const tachka = new Tachka({ port: server.port });
 		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
 		cleanup.push(() => tachka.bridge.close(), server.close);
-		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77, why: "flag the far mines in the east" }], merge: [] }; } };
+		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77, why: "flag the far mines in the east" }], merge: [], hold: [] }; } };
 		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
 		const entry = journal.tail(3, 1)[0];
 		expect(entry?.deviations).toContainEqual({ kind: "hire_failed", hero: 77, town: 1 });
@@ -406,11 +406,54 @@ describe("review round", () => {
     tachka.subscribe(e => e.type === "review" && reviews.push(e.revised));
     const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
     cleanup.push(() => tachka.bridge.close(), server.close);
-    const leave = { note: "go", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "sawmill" }], hire: [], merge: [] };
-    const king = { decide: async () => leave, revise: async () => ({ note: "stay and recruit", missions: [], hire: [], merge: [] }) };
+    const leave = { note: "go", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "sawmill" }], hire: [], merge: [], hold: [] };
+    const king = { decide: async () => leave, revise: async () => ({ note: "stay and recruit", missions: [], hire: [], merge: [], hold: [] }) };
     await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
     expect(reviews).toEqual([true]);
     expect(calls).not.toContain("move_hero");
     expect(journal.tail(3, 1)[0]?.review).toEqual({ findings: ["empty_town"], revised: true });
   });
+});
+
+describe("leftover movement", () => {
+	async function turn(hold: number[]) {
+		const walked: Array<{ x: number; y: number }> = [];
+		const server = await startFakeBridge((cmd, args: any) => {
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 3, week: 1, dayOfWeek: 3, resources: res({ gold: 100 }), towns: [],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: 1500, movementLimit: 1500, army: [], primarySkills: {} }],
+				};
+			case "targets":
+				return [site(10, "campfire", "", "Campfire", 0), site(11, "resource", "", "Wood", 0, { visitedByUs: true }), site(12, "mine", "sawmill", "Sawmill", 1)];
+			case "move_hero":
+				walked.push({ x: args.x, y: args.y });
+				return { reached: true, pos: { x: args.x, y: args.y, z: 0 }, movement: walked.length === 1 ? 1200 : walked.length === 2 ? 700 : 100, status: { pendingQuestions: [] } };
+			case "status":
+				return { pendingQuestions: [] };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { decide: async () => ({ note: "go", missions: [{ hero: 5, target: { x: 9, y: 9, z: 0 }, intent: "to the east gate" }], hire: [], merge: [], hold }) };
+		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
+		return { walked, entry: journal.tail(3, 1)[0] };
+	}
+
+	it("keeps walking to the nearest unvisited site while a quarter of the day is left", async () => {
+		const { walked, entry } = await turn([]);
+		expect(walked).toEqual([{ x: 9, y: 9 }, { x: 10, y: 10 }, { x: 12, y: 12 }]);
+		expect(entry?.moves.map(m => m.intent.startsWith("(automatic"))).toEqual([false, true, true]);
+	});
+
+	it("leaves a held hero where it is", async () => {
+		const { walked } = await turn([5]);
+		expect(walked).toEqual([{ x: 9, y: 9 }]);
+	});
 });

@@ -53,6 +53,8 @@ export const decisionSchema = z.object({
 	/** `why` is the job the hero will do that nobody else can; it goes to the journal. */
 	hire: z.array(z.object({ town: z.number().int(), hero: z.number().int(), why: z.string().min(15) }).strict()).default([]),
 	merge: z.array(z.object({ from: z.number().int(), to: z.number().int() }).strict()).default([]),
+	/** Heroes that stay where they are this turn; every other hero uses up its movement. */
+	hold: z.array(z.number().int()).default([]),
 	/** Rewrites the strategy memory that is shown to you at the top of every brief. */
 	memory: memorySchema.optional(),
 }).strict();
@@ -124,7 +126,7 @@ export class ScriptedKing implements King {
 		return {
 			note: stale ? "default economy plan; heroes visit supply sites first, then the nearest site" : "keep the plan; heroes continue",
 			plan: stale ? defaultPlan(facts) : undefined,
-			missions, hire: [], merge: [],
+			missions, hire: [], merge: [], hold: [],
 		};
 	}
 

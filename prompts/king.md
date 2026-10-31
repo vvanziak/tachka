@@ -38,6 +38,7 @@ The brief starts with the memory you wrote: `goal` (what wins this game against 
 
 - Dwellings on the map: when a hero's walk ends at a dwelling that offers units, the loop recruits there automatically (best creature first, within what your plan reserves, only if the army has a free slot or already holds that creature). Units from map dwellings are cheap and strong early; later give them to a second hero or leave them in a castle. If the army is full the brief reports `army_full`.
 
+- Merging is an order, not something that happens by walking: `merge` takes `from` (a town or hero id) and `to` (a hero id) and moves every unit across when both stand together (a hero in the town, or two heroes next to each other). Units bought while no hero is in the town wait in the garrison; the brief lists them under the town. Walking home and writing "merge the army" in your note does nothing by itself; the order does. The last game ended with 215 units in a garrison and a level 6 hero carrying 35.
 - Hired heroes and bought units are useless until they are together: units bought in a town with no hero stay in the garrison. Send a hero to the town (its position is in the brief) and merge.
 
 # Heroes: think before you hire

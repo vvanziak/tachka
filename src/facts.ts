@@ -29,6 +29,7 @@ export interface TownFacts {
 	tavern: TavernHero[];
 	/** Units standing in the town's own garrison. */
 	garrison: number;
+	garrisonArmy: Array<{ creature: string; count: number }>;
 }
 
 export interface EconomyFacts {
@@ -91,6 +92,7 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 			recruitable: town.recruitable,
 			tavern,
 			garrison: (town.army ?? []).reduce((n, a) => n + a.count, 0),
+			garrisonArmy: (town.army ?? []).map(a => ({ creature: a.creature, count: a.count })),
 		});
 	}
 

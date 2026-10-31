@@ -30,6 +30,7 @@ export function renderBrief(brief: Brief): string {
 	lines.push("\nTOWNS");
 	for(const t of facts.towns) {
 		lines.push(`- town ${t.id} ${t.name} [${short(t.faction)}] at ${t.pos.x},${t.pos.y},${t.pos.z} ${t.builtThisTurn ? "(already built today)" : ""} visiting hero: ${t.hasVisitingHero}, garrison hero: ${t.hasGarrisonHero}`);
+		lines.push(`  garrison (units standing in the town, NOT with any hero): ${t.garrisonArmy.map(a => `${a.count} ${short(a.creature)}`).join(", ") || "none"}${t.garrison > 0 ? ` = ${t.garrison} units; they join a hero only through a merge order with the hero in the town` : ""}`);
 		lines.push(`  built: ${t.buildings.map(short).join(", ")}`);
 		const options = t.options.map(o => `${short(o.building)}[${o.state}${o.missing.length ? " lacks " + o.missing.join("+") : ""}; ${money(o.cost)}]`);
 		lines.push(`  can build: ${options.join("; ") || "nothing"}`);

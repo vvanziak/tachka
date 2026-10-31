@@ -61,3 +61,24 @@ describe("reviewDecision", () => {
 		expect(codes(brief({}, { threats: [enemy] }), decision({ missions: [{ hero: 1, target, intent: "explore" }] }))).toContain("toward_enemy");
 	});
 });
+
+describe("army left in the garrison", () => {
+	const hero = (id: number, units: number) => ({ id, name: "Verdish", class: "", level: 6, pos: { x: 5, y: 5, z: 0 }, movement: 1500, army: [{ creature: "core:imp", count: units, slot: 0 }], primarySkills: {} });
+	const home = { id: 1, name: "Home", faction: "core:inferno", pos: { x: 5, y: 5, z: 0 }, builtThisTurn: false, hasVisitingHero: false, hasGarrisonHero: false, buildings: [], options: [], recruitable: [], tavern: [], garrison: 215, garrisonArmy: [{ creature: "core:imp", count: 215 }] };
+	const b = (heroes: unknown[]) => ({
+		facts: { day: 40, week: 6, dayOfWeek: 5, resources: {}, incomeSinceLastTurn: undefined, towns: [home], heroes, threats: [], game: { player: "red", mapSize: undefined }, mines: { owned: [], others: [] }, rankings: undefined },
+		plan: undefined, sites: {}, blockers: [], journal: [], deviations: [], messages: [], events: [], memory: undefined,
+	}) as unknown as Brief;
+	const d = (merge: Array<{ from: number; to: number }> = []) => ({ note: "n", missions: [], hire: [], merge }) as unknown as Decision;
+
+	it("tells the king the exact merge order when a big garrison sits next to a small army", () => {
+		const [finding] = reviewDecision(b([hero(9, 35)]), d());
+		expect(finding?.code).toBe("army_at_home");
+		expect(finding?.text).toContain('merge: [{ "from": 1, "to": 9 }]');
+	});
+
+	it("is quiet once the merge is ordered or the hero already carries the army", () => {
+		expect(reviewDecision(b([hero(9, 35)]), d([{ from: 1, to: 9 }])).map(f => f.code)).not.toContain("army_at_home");
+		expect(reviewDecision(b([hero(9, 400)]), d()).map(f => f.code)).not.toContain("army_at_home");
+	});
+});

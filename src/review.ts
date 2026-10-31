@@ -35,6 +35,17 @@ export function reviewDecision(brief: Brief, decision: Decision): Finding[] {
 		}
 	}
 
+	// units bought while no hero stood in the town wait in the garrison until a merge order moves them to a hero
+	for(const town of facts.towns) {
+		const strongest = [...facts.heroes].sort((a, b) => b.army.reduce((n, x) => n + x.count, 0) - a.army.reduce((n, x) => n + x.count, 0))[0];
+		const carried = strongest ? strongest.army.reduce((n, x) => n + x.count, 0) : 0;
+		const merging = decision.merge.some(m => m.from === town.id);
+		if(town.garrison >= 10 && town.garrison > 1.5 * carried && !merging && strongest) {
+			const here = near(strongest.pos, town.pos, 0) || decision.missions.some(m => m.hero === strongest.id && near(m.target, town.pos, 0));
+			found.push({ code: "army_at_home", text: `${town.name} holds ${town.garrison} units in its garrison while your strongest hero ${strongest.name} (${strongest.id}) carries ${carried}. Garrison units do not fight for a hero until you order the merge. ${here ? `The hero is in or going to the town: add merge: [{ "from": ${town.id}, "to": ${strongest.id} }].` : `Send ${strongest.name} to ${town.name} at ${town.pos.x},${town.pos.y},${town.pos.z}, then add merge: [{ "from": ${town.id}, "to": ${strongest.id} }] (merges run after the walks).`} Keep a few units back only if an enemy is near.` });
+		}
+	}
+
 	const newHeroes = facts.heroes.length + decision.hire.length;
 	if(decision.hire.length > 0 && newHeroes > 2) {
 		const sizes = facts.heroes.map(h => `${h.name} ${h.army.reduce((n, a) => n + a.count, 0)} units`).join(", ");

@@ -21,8 +21,6 @@ When the game ends (or the client is closed) Tachka stays up: it saves `final.js
 
 Restarting needs no flag: Tachka looks at the game's day and continues the latest game folder (journal, economy plan, turn counter, chat) when that game was not won or lost and its last day is not after today's; otherwise it starts a new folder. `--new` forces a new folder, `--resume` forces the latest one. A closed or crashed client does not end a game, so restarting and loading an autosave continues it.
 
-Pace and limits: `--pace 20` makes each turn last at least 20 seconds so you can follow it; `--max-heroes 3` (default) refuses hires beyond that.
-
 Options: `--king cli|api|scripted` (scripted needs no model), `--model sonnet` (CLI), `--turns N`, `--ui PORT`, `--out DIR` (default `logs/<time>`: `exchanges.jsonl` is every bridge request and reply, `journal.jsonl` is one line per turn).
 
 A model failure never stops the game: the page shows the problem, the economy plan keeps running and heroes stand still until the next turn.

@@ -24,7 +24,7 @@ export function renderBrief(brief: Brief): string {
 		lines.push(`  stock: ${t.recruitable.map(r => `${short(r.creature)}(lvl${r.level}) ${r.available} @${money(r.cost)}`).join("; ") || "none"}`);
 	}
 
-	lines.push(`\nHEROES (${facts.heroes.length}; hiring beyond the limit is refused)`);
+	lines.push("\nHEROES");
 	for(const h of facts.heroes)
 		lines.push(`- hero ${h.id} ${h.name} (${short(h.class)}, lvl ${h.level}) at ${h.pos.x},${h.pos.y},${h.pos.z} movement ${h.movement}; army: ${h.army.map(a => `${a.count} ${short(a.creature)}`).join(", ") || "none"}; ${Object.entries(h.primarySkills).map(([k, v]) => `${k} ${v}`).join(" ")}`);
 

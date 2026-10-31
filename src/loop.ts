@@ -6,7 +6,7 @@ import { defaultPlan } from "./defaultPlan.js";
 import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
 import { collectFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
-import { parseDecision, type Brief, type King } from "./king.js";
+import { parseDecision, type Brief, type King, type Memory } from "./king.js";
 import { collectSites, goTo, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
@@ -19,6 +19,8 @@ export interface LoopState {
 	previousEnd: Resources | undefined;
 	deviations: unknown[];
 	turn: number;
+	/** The king's strategy memory, rewritten by its decisions. */
+	memory?: Memory;
 	/** Why the loop stopped: "game over", "connection lost", "failed turns", or undefined while running or when aborted. */
 	ended?: string;
 }
@@ -159,14 +161,14 @@ export function newLoopState(): LoopState {
 
 /** What must outlive a restart besides the journal: the plan, the treasury at the end of our last turn, the turn counter. */
 export function saveLoopState(path: string, state: LoopState): void {
-	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended }));
+	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended, memory: state.memory }));
 }
 
 export function loadLoopState(path: string): LoopState {
 	if(!existsSync(path))
 		return newLoopState();
 	const saved = JSON.parse(readFileSync(path, "utf8"));
-	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended };
+	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended, memory: saved.memory };
 }
 
 function mergeSites(perHero: Record<number, Site[]>): Site[] {
@@ -201,14 +203,16 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	const brief: Brief = {
 		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
-		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(),
+		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(), memory: state.memory,
 	};
-	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan } });
+	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
 	const decision = parseDecision(await king.decide(brief));
 	const usage = king.usage?.();
 	tachka.publish({ type: "king", note: decision.note, usage: usage?.last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }, total: usage?.total ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }, ms: usage?.ms ?? 0 });
 	if(decision.reply)
 		tachka.publish({ type: "chat", from: "king", text: decision.reply });
+	if(decision.memory)
+		state.memory = decision.memory;
 	if(decision.plan)
 		state.plan = decision.plan;
 	else if(!state.plan) {

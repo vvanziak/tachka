@@ -75,6 +75,7 @@ pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size
     <section><h2>Heroes</h2><div id="heroes" class="muted">waiting for the first turn</div></section>
     <section><h2>Towns</h2><div id="towns" class="muted"></div></section>
     <section><h2>Blocked</h2><div id="blockers" class="muted"></div></section>
+    <section><h2>Strategy</h2><div id="memory" class="muted">none yet</div></section>
     <section><h2>Plan</h2><div id="plan" class="muted"></div></section>
     <section id="finalbox" hidden><h2>Game over</h2><div id="final"></div></section>
   </aside>
@@ -102,6 +103,7 @@ function showFacts(f) {
   $("heroes").innerHTML = f.heroes.length ? "<ul>" + f.heroes.map(h => `<li><b>${esc(h.name)}</b> ${esc(short(h.class))} L${h.level} at ${h.pos.x},${h.pos.y} · move ${h.movement}<br><span class="muted">${h.army.map(a => a.count + " " + esc(short(a.creature))).join(", ") || "no army"} · A${h.primarySkills.attack} D${h.primarySkills.defense} P${h.primarySkills.spellPower} K${h.primarySkills.knowledge}</span></li>`).join("") + "</ul>" : "no heroes";
   $("towns").innerHTML = f.towns.length ? "<ul>" + f.towns.map(t => `<li><b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings</span>${t.stock.length ? `<br><span class="muted">stock: ${t.stock.filter(s => s.available).map(s => s.available + " " + esc(short(s.creature))).join(", ") || "none"}</span>` : ""}</li>`).join("") + "</ul>" : "no towns";
   $("blockers").innerHTML = f.blockers.length ? "<ul>" + f.blockers.map(b => `<li>${esc(short(b.building))} <span class="muted">short ${Object.entries(b.short).map(([k, v]) => v + " " + k).join(", ")} · ${b.suppliers.length ? "supply: " + esc(b.suppliers[0].site.name) + " (" + b.suppliers[0].site.turns + " turns)" : "no known supplier"}</span></li>`).join("") + "</ul>" : "nothing blocked";
+  $("memory").innerHTML = f.memory ? `<div><b>Goal</b> ${esc(f.memory.goal)}</div><div><b>Next</b> ${esc(f.memory.next)}</div>${f.memory.deferred.length ? "<div><b>Deferred</b></div><ul>" + f.memory.deferred.map(d => `<li>${esc(d.what)} <span class="muted">- ${esc(d.unlock)}</span></li>`).join("") + "</ul>" : ""}${f.memory.watch ? `<div><b>Watch</b> ${esc(f.memory.watch)}</div>` : ""}` : "none yet";
   $("plan").innerHTML = f.plan ? `<div>${esc(f.plan.note || "")}</div><div class="muted">review by day ${f.plan.reviewByDay}</div><details><summary>full plan</summary><pre>${esc(JSON.stringify(f.plan, null, 1))}</pre></details>` : "none yet";
   status("the king is thinking", true);
 }
@@ -116,6 +118,7 @@ function handle(e) {
     case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
     case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
     case "status": status(e.text, false); add("turn", esc(e.text)); break;
+    case "query": add("thought", `asked the game: ${esc(e.text)}`); break;
     case "typing": {
       let el = $("typing");
       if (e.on && !el) { add("thought", "Tachka is typing…"); feed.lastChild.id = "typing"; }

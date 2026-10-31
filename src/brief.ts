@@ -9,6 +9,19 @@ const money = (r: Partial<Resources>) => Object.entries(r).filter(([, v]) => v).
 export function renderBrief(brief: Brief): string {
 	const { facts } = brief;
 	const lines: string[] = [];
+	if(brief.memory) {
+		const m = brief.memory;
+		lines.push("YOUR STRATEGY MEMORY (you wrote it earlier; rewrite it in `memory` whenever it changes)");
+		lines.push(`goal: ${m.goal}`);
+		lines.push(`next: ${m.next}`);
+		for(const d of m.deferred)
+			lines.push(`deferred: ${d.what} -- unlocks when: ${d.unlock}`);
+		if(m.watch)
+			lines.push(`watch: ${m.watch}`);
+		lines.push("");
+	}
+	else
+		lines.push("YOUR STRATEGY MEMORY: none yet. Write it in `memory` on this turn.\n");
 	lines.push(`DAY ${facts.day} (week ${facts.week}, day ${facts.dayOfWeek} of the week). You are ${facts.game.player ?? "?"}${facts.game.mapSize ? `, map ${facts.game.mapSize.x}x${facts.game.mapSize.y}, ${facts.game.mapSize.z} level(s)` : ""}.`);
 	lines.push(`Treasury: ${money(facts.resources)}`);
 	if(facts.incomeSinceLastTurn)
@@ -39,7 +52,7 @@ export function renderBrief(brief: Brief): string {
 		const sites = (brief.sites[h.id] ?? []).slice(0, 14);
 		lines.push(`hero ${h.id}:`);
 		for(const s of sites)
-			lines.push(`  ${s.id} ${s.name} [${s.type}${s.subtype ? "/" + s.subtype : ""}] at ${s.pos.x},${s.pos.y},${s.pos.z} turns ${s.turns} steps ${s.steps}${s.threat ? ` threat "${s.threat}" size ${s.size} ratio ${s.strengthRatio}` : ""}`);
+			lines.push(`  ${s.id} ${s.name} [${s.type}${s.subtype ? "/" + s.subtype : ""}] at ${s.pos.x},${s.pos.y},${s.pos.z} turns ${s.turns} steps ${s.steps}${s.threat ? ` threat "${s.threat}" size ${s.size} ratio ${s.strengthRatio}` : ""}${s.visitedByHero ? " [this hero has visited]" : s.visitedByUs ? " [we have visited]" : ""}`);
 		if(!sites.length)
 			lines.push("  (nothing reachable and unvisited is known)");
 	}

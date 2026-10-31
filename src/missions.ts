@@ -19,6 +19,9 @@ export interface Site {
 	size?: string;
 	threat?: string;
 	strengthRatio?: number;
+	/** The game's own visited status: per hero for places like a Learning Stone, per player for weekly ones; both reset by the game. */
+	visitedByHero?: boolean;
+	visitedByUs?: boolean;
 }
 
 export interface MoveOutcome {

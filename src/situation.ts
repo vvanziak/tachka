@@ -7,6 +7,7 @@ type Facts = {
 	heroes: Array<{ id: number; name: string; class: string; level: number; pos: { x: number; y: number }; army: Array<{ creature: string; count: number }>; primarySkills: Record<string, number> }>;
 	blockers: Array<{ building: string; short: Record<string, number> }>;
 	plan?: { note?: string };
+	memory?: { goal: string; next: string; deferred: Array<{ what: string; unlock: string }>; watch?: string };
 };
 
 const short = (key: string) => key.replace(/^core:/, "");
@@ -47,6 +48,8 @@ export class Situation {
 			if(f.plan?.note)
 				lines.push(`Economy plan: ${f.plan.note}`);
 		}
+		if(f?.memory)
+			lines.push(`Strategy memory: goal: ${f.memory.goal}. Next: ${f.memory.next}.${f.memory.deferred.length ? ` Deferred: ${f.memory.deferred.map(d => `${d.what} (unlocks: ${d.unlock})`).join("; ")}.` : ""}${f.memory.watch ? ` Watch: ${f.memory.watch}.` : ""}`);
 		if(this.lastThought)
 			lines.push(`Latest thought: ${this.lastThought}`);
 

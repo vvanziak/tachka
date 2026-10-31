@@ -81,7 +81,11 @@ try {
 			king = new ScriptedKing();
 		else {
 			const brain: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--model") ?? "sonnet");
-			king = new LlmKing(brain, { onProblem: text => tachka.publish({ type: "problem", text }) });
+			king = new LlmKing(brain, {
+				onProblem: text => tachka.publish({ type: "problem", text }),
+				query: (cmd, args) => tachka.bridge.call(cmd, args),
+				onQuery: text => tachka.publish({ type: "query", text }),
+			});
 			console.log(`king: ${brain.name}`);
 		}
 

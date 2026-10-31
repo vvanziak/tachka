@@ -27,6 +27,12 @@ h1 { font: 700 20px/1 Georgia, serif; margin: 0; letter-spacing: .5px; color: va
 .icon { image-rendering: auto; vertical-align: middle; flex: none; }
 .res span { display: inline-flex; align-items: center; gap: 4px; }
 aside li:has(> img.icon) { display: flex; gap: 8px; align-items: flex-start; }
+.town { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; }
+.town > div { min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; margin-top: 3px; }
+.label { font: 11px var(--mono, monospace); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); min-width: 84px; }
+.army small { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.dim { opacity: .45; }
 .army { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; }
 .army > span { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
 .res b { font-weight: 600; margin-right: 4px; color: var(--muted); }
@@ -111,13 +117,27 @@ function add(cls, html) {
 function status(text, busy) { const s = $("status"); s.textContent = text; s.classList.toggle("busy", !!busy); }
 function tokens(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
 
+const unit = (name, n, extra) => `<span title="${esc(short(name))}${extra ? " " + esc(extra) : ""}">${creatureIcon(name)}${n}${creatureIcon(name) ? "" : " " + esc(short(name))}</span>`;
+function townCard(t) {
+  const dwellings = t.buildings.filter(b => /dwelling/i.test(b)).length;
+  const stock = (t.stock || []).slice().sort((a, b) => a.level - b.level);
+  const garrison = t.garrisonArmy || [];
+  const total = garrison.reduce((n, a) => n + a.count, 0);
+  const waiting = stock.reduce((n, s) => n + s.available, 0);
+  return `<div class="town">${townIcon(t.faction)}<div>
+    <b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings · ${dwellings} dwellings${t.hasVisitingHero ? " · hero visiting" : ""}${t.hasGarrisonHero ? " · hero garrisoned" : ""}</span>
+    <div class="row"><span class="label" title="Units waiting in the built dwellings; they are not ours until bought">in dwellings</span>${stock.length ? `<span class="army">${stock.map(s => `<span class="${s.available ? "" : "dim"}" title="level ${s.level} dwelling, ${s.available} available">${creatureIcon(s.creature)}${s.available}${creatureIcon(s.creature) ? "" : " " + esc(short(s.creature))}<small>L${s.level + 1}</small></span>`).join("")}</span><span class="muted"> ${waiting} to buy</span>` : '<span class="muted">no dwellings built</span>'}</div>
+    <div class="row"><span class="label" title="Units we already bought that stand in the town's garrison">in garrison</span>${garrison.length ? `<span class="army">${garrison.map(a => unit(a.creature, a.count)).join("")}</span><span class="muted"> ${total} units</span>` : '<span class="muted">empty</span>'}</div>
+  </div></div>`;
+}
+
 function showFacts(f) {
   lastFacts = f;
   lastDay = f.day;
   $("day").textContent = `Day ${f.day} · week ${f.week}`;
   $("res").innerHTML = Object.entries(f.resources).map(([k, v]) => `<span title="${esc(k)}">${resIcon(k)}${v}${f.income && f.income[k] ? ` <span class="muted">${f.income[k] > 0 ? "+" : ""}${f.income[k]}</span>` : ""}</span>`).join("");
   $("heroes").innerHTML = f.heroes.length ? "<ul>" + f.heroes.map(h => `<li>${heroIcon(h.name)}<div><b>${esc(h.name)}</b> ${esc(short(h.class))} L${h.level} at ${h.pos.x},${h.pos.y} · move ${h.movement}<br><span class="army">${h.army.map(a => `<span title="${esc(short(a.creature))}">${creatureIcon(a.creature)}${a.count}${creatureIcon(a.creature) ? "" : " " + esc(short(a.creature))}</span>`).join("") || '<span class="muted">no army</span>'}</span><br><span class="muted">A${h.primarySkills.attack} D${h.primarySkills.defense} P${h.primarySkills.spellPower} K${h.primarySkills.knowledge}</span></div></li>`).join("") + "</ul>" : "no heroes";
-  $("towns").innerHTML = f.towns.length ? "<ul>" + f.towns.map(t => `<li>${townIcon(t.faction)}<div><b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings</span>${t.stock.length ? `<br><span class="army">${t.stock.filter(s => s.available).map(s => `<span title="${esc(short(s.creature))}">${creatureIcon(s.creature)}${s.available}${creatureIcon(s.creature) ? "" : " " + esc(short(s.creature))}</span>`).join("") || '<span class="muted">no stock</span>'}</span>` : ""}</div></li>`).join("") + "</ul>" : "no towns";
+  $("towns").innerHTML = f.towns.length ? f.towns.map(townCard).join("") : "no towns";
   $("blockers").innerHTML = f.blockers.length ? "<ul>" + f.blockers.map(b => `<li>${esc(short(b.building))} <span class="muted">short ${Object.entries(b.short).map(([k, v]) => v + " " + k).join(", ")} · ${b.suppliers.length ? "supply: " + esc(b.suppliers[0].site.name) + " (" + b.suppliers[0].site.turns + " turns)" : "no known supplier"}</span></li>`).join("") + "</ul>" : "nothing blocked";
   $("memory").innerHTML = f.memory ? `<div><b>Goal</b> ${esc(f.memory.goal)}</div><div><b>Next</b> ${esc(f.memory.next)}</div>${f.memory.deferred.length ? "<div><b>Deferred</b></div><ul>" + f.memory.deferred.map(d => `<li>${esc(d.what)} <span class="muted">- ${esc(d.unlock)}</span></li>`).join("") + "</ul>" : ""}${f.memory.watch ? `<div><b>Watch</b> ${esc(f.memory.watch)}</div>` : ""}` : "none yet";
   $("plan").innerHTML = f.plan ? `<div>${esc(f.plan.note || "")}</div><div class="muted">review by day ${f.plan.reviewByDay}</div><details><summary>full plan</summary><pre>${esc(JSON.stringify(f.plan, null, 1))}</pre></details>` : "none yet";

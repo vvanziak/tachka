@@ -259,7 +259,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
 		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(), memory: state.memory,
 	};
-	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
+	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable, garrisonArmy: t.garrisonArmy, hasVisitingHero: t.hasVisitingHero, hasGarrisonHero: t.hasGarrisonHero })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
 	let decision = parseDecision(await king.decide(brief));
 	// the checks run on the first decision; the king gets one round to fix it or to say why the finding does not apply
 	const findings = reviewDecision(brief, decision);

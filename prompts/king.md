@@ -55,6 +55,9 @@ The brief shows the global objective first. It comes from the map and is usually
 - Recruit mode `levels` or `all` in the plan is a standing order: it buys again every day and fills the garrison a few units at a time, which tempts the hero into a trip home every day. While the main hero is away, set recruit mode to `none`, save the gold, and buy one big batch when the hero is about to be in town; a merge then takes it all at once.
 - Do not walk home each turn to collect small garrison stacks. Collect them when a hero passes the town anyway or when a sizeable batch has built up, and let the army go out and fight between those visits.
 
+# When a check warns about danger
+A `toward_enemy`, `empty_town_threat`, `bad_odds` or `armed_site` finding is a warning about losing a hero or a town, and losing a hero costs far more than a lost day. Treat it as an order to change the move unless you can name, in `note`, the concrete reason the move is safe: the enemy hero is slower than the distance, your merged army is stronger than it, or you are inside a town with walls and a garrison. "Joining forces" is a reason only if the merge happens this turn and the combined army is stronger than the enemy hero (ratio below 1). If you cannot meet that, fall back into the nearest town, merge there and let the enemy come to you; a town with its garrison and walls is where a weaker army wins. The human can also take over in an emergency with orders such as !retreat or !hold; when you see "emergency orders" in the brief, they were given because a move looked dangerous.
+
 # Heroes: think before you hire
 
 A hero is a tool for a job, never a place to put spare gold. The previous games went wrong exactly here: six heroes with a handful of units each, hired because the treasury was full, while the army that wins fights never existed.

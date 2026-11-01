@@ -15,6 +15,7 @@ import type { Plan } from "./plan.js";
 import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
 import type { Tachka } from "./core.js";
 import type { AnswerContext, Question } from "./questions.js";
+import { applyManual } from "./manual.js";
 import { nextTurn } from "./turn.js";
 
 export interface LoopState {
@@ -355,6 +356,13 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		const before = JSON.stringify(decision);
 		decision = parseDecision(await king.revise(brief, decision, findings));
 		revised = JSON.stringify(decision) !== before;
+	}
+	const manual = tachka.drainManual();
+	if(manual.length > 0) {
+		const applied = applyManual(decision, manual, facts);
+		decision = applied.decision;
+		tachka.publish({ type: "chat", from: "king", text: `Following your orders: ${applied.done.join("; ")}.` });
+		tachka.note(`The human gave emergency orders this turn: ${applied.done.join("; ")}. They replaced your missions for those heroes.`);
 	}
 	deps.trace?.step("review", { findings, revised, decisionBeforeRevise: revised ? firstDecision : undefined, decision, model: (king.trace?.() ?? []).filter(r => (r as { kind?: string }).kind === "revise") });
 	if(findings.length > 0)

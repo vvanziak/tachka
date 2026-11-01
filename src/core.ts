@@ -1,3 +1,4 @@
+import { MANUAL_HELP, parseManual, type ManualOrder } from "./manual.js";
 import { BridgeClient, type BridgeOptions, type Exchange } from "./bridge.js";
 
 export interface KingUsage {
@@ -9,6 +10,7 @@ export interface KingUsage {
 export type TachkaEvent =
 	| { type: "chat"; from: "human" | "king"; text: string }
 	| { type: "exchange"; exchange: Exchange }
+	| { type: "command"; text: string }
 	| { type: "facts"; facts: unknown }
 	| { type: "turn"; day: number; line: string; journal: unknown }
 	| { type: "king"; note: string; usage: KingUsage; total: KingUsage; ms: number }
@@ -28,6 +30,7 @@ export class Tachka {
 	readonly bridge: BridgeClient;
 	private readonly listeners = new Set<Listener>();
 	private inbox: string[] = [];
+	private manual: ManualOrder[] = [];
 	private paused = false;
 
 	private events: string[] = [];
@@ -48,10 +51,28 @@ export class Tachka {
 		return () => this.listeners.delete(listener);
 	}
 
-	/** A message from the human; the brain takes it from the inbox at the next decision point. */
+	/** A message from the human; the brain takes it from the inbox at the next decision point. An order starting with "!" is an emergency order for the next turn. */
 	say(text: string): void {
+		if(text.trim().startsWith("!")) {
+			this.publish({ type: "command", text });
+			const order = parseManual(text);
+			if(order) {
+				this.manual.push(order);
+				this.publish({ type: "chat", from: "king", text: "Understood: this order replaces my plan for those heroes on my next turn." });
+			}
+			else
+				this.publish({ type: "chat", from: "king", text: MANUAL_HELP });
+			return;
+		}
 		this.inbox.push(text);
 		this.publish({ type: "chat", from: "human", text });
+	}
+
+	/** Emergency orders typed since the last turn. */
+	drainManual(): ManualOrder[] {
+		const orders = this.manual;
+		this.manual = [];
+		return orders;
 	}
 
 	/** What the game reported since the last call: battle results, pickups, messages. */

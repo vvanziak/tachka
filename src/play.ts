@@ -12,6 +12,7 @@ import { jsonlRecorder } from "./recorder.js";
 import { startServer } from "./server.js";
 import { Situation } from "./situation.js";
 import { Talker } from "./talker.js";
+import { Trace } from "./trace.js";
 
 const args = new Map<string, string>();
 for(let i = 2; i < process.argv.length; i++) {
@@ -31,6 +32,7 @@ const maxTurns = args.has("--turns") ? Number(args.get("--turns")) : undefined;
 const uiPort = Number(args.get("--ui") ?? "8787");
 const forceResume = process.argv.includes("--resume");
 const forceNew = process.argv.includes("--new");
+const debug = process.argv.includes("--debug") || process.env.TACHKA_DEBUG === "1";
 
 /** The game folder: the latest one when it holds the same unfinished game (not won or lost, its last day not after today's), a new one otherwise. A closed client does not end a game: it is the usual restart. */
 function chooseDir(day: number): { dir: string; resume: boolean } {
@@ -71,9 +73,12 @@ try {
 		const today = await tachka.bridge.call<{ day: number }>("get_state", { radius: 0 }).then(s => s.day);
 		const { dir, resume } = chooseDir(today);
 		console.log(resume ? `continuing the game in ${dir}` : `new game, logs in ${dir}`);
+		const trace = debug ? new Trace(`${dir}/turns`) : undefined;
 		const write = jsonlRecorder(`${dir}/exchanges.jsonl`);
-		early.forEach(write);
-		record = write;
+		record = x => { write(x); trace?.exchange(x); };
+		early.forEach(record);
+		if(trace)
+			console.log(`debug trace: one file per step in ${dir}/turns`);
 
 		const journal = new Journal(`${dir}/journal.jsonl`);
 		let king: King;
@@ -101,7 +106,7 @@ try {
 				tachka.publish({ type: "turn", day: e.day, journal: e, line: `built ${e.built.map(b => b.building.replace("core:", "")).join(", ") || "nothing"}; recruited ${e.recruited.reduce((n, r) => n + r.count, 0)}; ${e.moves.map(m => m.intent).join("; ") || "no moves"}` });
 			}
 
-		const state = await playGame({ tachka, king, journal, memoryDays: 7 }, { maxTurns, signal: abort.signal, statePath: `${dir}/state.json`, resume });
+		const state = await playGame({ tachka, king, journal, memoryDays: 7, trace }, { maxTurns, signal: abort.signal, statePath: `${dir}/state.json`, resume });
 		console.log(`stopped after ${state.turn} turns${state.ended ? ` (${state.ended})` : ""}`);
 		if(state.ended === "game over" || state.ended === "connection lost") {
 			tachka.publish({ type: "status", text: state.ended === "game over" ? "the game is over" : "the game was closed" });

@@ -4,6 +4,8 @@ import { reviewDecision } from "./review.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parsePlan } from "./plan.js";
 import { defaultPlan } from "./defaultPlan.js";
+import { Trace } from "./trace.js";
+import { renderBrief } from "./brief.js";
 import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
 import { collectFacts, type EconomyFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
@@ -32,6 +34,8 @@ export interface LoopDeps {
 	journal: Journal;
 	/** Days of journal shown to the king. */
 	memoryDays: number;
+	/** Debug mode: every step of a turn is written to its own file. */
+	trace?: Trace;
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -249,26 +253,33 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		state.deviations = carried;
 		return false;
 	}
+	deps.trace?.step("dialogs", { deviations: carried });
 
 	const facts = await collectFacts(bridge, state.previousEnd);
 	const sites: Record<number, Site[]> = {};
 	for(const hero of facts.heroes)
 		sites[hero.id] = await collectSites(bridge, hero.id, 40);
+	deps.trace?.begin(facts.day);
+	deps.trace?.step("facts", { facts, sites });
 
 	const brief: Brief = {
 		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
 		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(), memory: state.memory,
 	};
 	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable, garrisonArmy: t.garrisonArmy, hasVisitingHero: t.hasVisitingHero, hasGarrisonHero: t.hasGarrisonHero })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
+	deps.trace?.step("brief", renderBrief(brief));
 	let decision = parseDecision(await king.decide(brief));
+	deps.trace?.step("decision", { decision, model: king.trace?.() });
 	// the checks run on the first decision; the king gets one round to fix it or to say why the finding does not apply
 	const findings = reviewDecision(brief, decision);
 	let revised = false;
+	const firstDecision = decision;
 	if(findings.length > 0 && king.revise) {
 		const before = JSON.stringify(decision);
 		decision = parseDecision(await king.revise(brief, decision, findings));
 		revised = JSON.stringify(decision) !== before;
 	}
+	deps.trace?.step("review", { findings, revised, decisionBeforeRevise: revised ? firstDecision : undefined, decision, model: (king.trace?.() ?? []).filter(r => (r as { kind?: string }).kind === "revise") });
 	if(findings.length > 0)
 		tachka.publish({ type: "review", findings: findings.map(f => f.text), revised });
 	const usage = king.usage?.();
@@ -368,6 +379,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		if(!heroes.some(x => x.id === h.hero))
 			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
 	}
+	deps.trace?.step("orders", { orders: { hire: decision.hire, merge: decision.merge, hold: decision.hold }, plan: state.plan, economy, moves, deviations });
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,
@@ -376,6 +388,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	});
 	state.deviations = deviations;
 	const entry = journal.tail(facts.day, 1).at(-1);
+	deps.trace?.step("record", entry);
 	tachka.publish({
 		type: "turn", day: facts.day, journal: entry,
 		line: `built ${economy?.built.map(b => b.building.replace("core:", "")).join(", ") || "nothing"}; recruited ${economy?.recruited.reduce((n, r) => n + r.count, 0) ?? 0}; ${moves.map(m => `${m.intent}${m.reached ? " (done)" : m.stopped ? ` (${m.stopped})` : ""}`).join("; ") || "no moves"}`,
@@ -385,6 +398,8 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		return false;
 	}
 	await nextTurn(bridge);
+	deps.trace?.step("end", { turn: state.turn, day: facts.day });
+	deps.trace?.finish();
 	return true;
 }
 

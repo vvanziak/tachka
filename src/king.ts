@@ -98,6 +98,8 @@ export interface King {
 	revise?(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision>;
 	/** Cost of the last decision and the running total, for kings that call a model. */
 	usage?(): { last: KingUsage; total: KingUsage; ms: number };
+	/** What the model was sent and answered for the last decision (for the debug trace). */
+	trace?(): unknown[];
 }
 
 /** Test double for the loop, not a player: default economy plan, heroes go to the nearest unguarded supplier or site. */

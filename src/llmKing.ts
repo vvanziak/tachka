@@ -39,6 +39,7 @@ export class LlmKing implements King {
 	readonly total: KingUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 	private last: KingUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 	private ms = 0;
+	private rounds: unknown[] = [];
 	// the CLI's validator does not know the draft 2020-12 meta-schema that zod names in `$schema`
 	private readonly schema = (({ $schema, ...rest }) => rest)(z.toJSONSchema(replySchema) as Record<string, unknown>);
 
@@ -48,6 +49,7 @@ export class LlmKing implements King {
 		const prompt = renderBrief(brief);
 		const started = Date.now();
 		this.last = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+		this.rounds = [];
 		let answers = "";
 		let lastError = "";
 		let asked = 0;
@@ -55,7 +57,9 @@ export class LlmKing implements King {
 			try {
 				const last = asked >= MAX_ASK_ROUNDS;
 				const user = `${prompt}${answers}${last ? "\n\nYou have no more questions left: decide now." : ""}${lastError ? `\n\nYour previous answer was rejected: ${lastError}\nAnswer again with a valid object.` : ""}`;
+				const sent = Date.now();
 				const reply = await this.brain.complete(SYSTEM, user, this.schema);
+				this.rounds.push({ kind: "decide", attempt: attempt + 1, promptChars: user.length, addedToBrief: user.slice(prompt.length), ms: Date.now() - sent, usage: reply.usage, reply: reply.json });
 				for(const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
 					this.last[key] += reply.usage[key];
 					this.total[key] += reply.usage[key];
@@ -74,6 +78,7 @@ export class LlmKing implements King {
 			}
 			catch(e) {
 				lastError = e instanceof Error ? e.message : String(e);
+				this.rounds.push({ kind: "decide", attempt: attempt + 1, error: lastError });
 				this.options.onProblem?.(`king attempt ${attempt + 1} failed: ${lastError}`);
 			}
 		}
@@ -84,7 +89,9 @@ export class LlmKing implements King {
 	async revise(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision> {
 		const prompt = `${renderBrief(brief)}\n\nYOUR DECISION SO FAR\n${JSON.stringify(decision)}\n\nCHECKS FOUND THESE PROBLEMS WITH IT\n${findings.map(f => `- ${f.text}`).join("\n")}\n\nFix what is real. If a finding does not apply, keep the decision and say in \`note\` why. Leave \`ask\` empty and answer with the full decision.`;
 		try {
+			const sent = Date.now();
 			const reply = await this.brain.complete(SYSTEM, prompt, this.schema);
+			this.rounds.push({ kind: "revise", addedToBrief: prompt.slice(renderBrief(brief).length), ms: Date.now() - sent, usage: reply.usage, reply: reply.json });
 			for(const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
 				this.last[key] += reply.usage[key];
 				this.total[key] += reply.usage[key];
@@ -117,6 +124,10 @@ export class LlmKing implements King {
 
 	answer(question: Question, context?: AnswerContext): number | undefined {
 		return defaultAnswer(question, context);
+	}
+
+	trace(): unknown[] {
+		return [...this.rounds];
 	}
 
 	usage() {

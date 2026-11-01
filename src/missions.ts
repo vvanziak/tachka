@@ -24,6 +24,9 @@ export interface Site {
 	visitedByUs?: boolean;
 }
 
+/** A site that holds an army without being a monster stack (a garrison): walking onto it starts a fight, and `targets` gives it no threat label. */
+export const isArmed = (site: Pick<Site, "type" | "subtype" | "name">): boolean => /garrison/i.test(`${site.type} ${site.subtype} ${site.name}`);
+
 export interface FightCandidate {
 	guard: Site;
 	/** Other objects within two tiles of the stack: what it most likely guards. */

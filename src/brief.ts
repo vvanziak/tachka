@@ -1,5 +1,5 @@
 import type { Brief } from "./king.js";
-import { fightCandidates } from "./missions.js";
+import { fightCandidates, isArmed } from "./missions.js";
 import { PLAYER_COLORS } from "./protocol.js";
 import type { Resources } from "./state.js";
 
@@ -63,7 +63,7 @@ export function renderBrief(brief: Brief): string {
 		const sites = (brief.sites[h.id] ?? []).slice(0, 14);
 		lines.push(`hero ${h.id}:`);
 		for(const s of sites)
-			lines.push(`  ${s.id} ${s.name} [${s.type}${s.subtype ? "/" + s.subtype : ""}] at ${s.pos.x},${s.pos.y},${s.pos.z} turns ${s.turns} steps ${s.steps}${s.threat ? ` threat "${s.threat}" size ${s.size} ratio ${s.strengthRatio}` : ""}${s.visitedByHero ? " [this hero has visited]" : s.visitedByUs ? " [we have visited]" : ""}`);
+			lines.push(`  ${s.id} ${s.name} [${s.type}${s.subtype ? "/" + s.subtype : ""}] at ${s.pos.x},${s.pos.y},${s.pos.z} turns ${s.turns} steps ${s.steps}${s.threat ? ` threat "${s.threat}" size ${s.size} ratio ${s.strengthRatio}` : ""}${isArmed(s) ? " [ARMED: holds an army with no strength shown; walking onto it starts a fight, so inspect it first]" : ""}${s.visitedByHero ? " [this hero has visited]" : s.visitedByUs ? " [we have visited]" : ""}`);
 		if(!sites.length)
 			lines.push("  (nothing reachable and unvisited is known)");
 	}

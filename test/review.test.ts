@@ -40,6 +40,12 @@ describe("reviewDecision", () => {
 		expect(codes(brief({}, big), home)).not.toContain("small_restock_trip");
 	});
 
+	it("flags a mission onto a garrison, which starts a fight without showing a strength", () => {
+		const garrison = { id: 58, type: "garrisonVertical", subtype: "antiMagic", name: "Garrison", pos: { x: 9, y: 9, z: 0 }, owner: -2, steps: 3, turns: 0 };
+		const go = decision({ missions: [{ hero: 1, target: { x: 9, y: 9, z: 0 }, intent: "visit" }] });
+		expect(codes(brief({ sites: { 1: [garrison] } }, { towns: [] }), go)).toContain("armed_site");
+	});
+
 	it("flags a hire that makes a third hero", () => {
 		const b = brief({}, { heroes: [hero(1), hero(2, 3, { x: 9, y: 9, z: 0 })] });
 		expect(codes(b, decision({ hire: [{ town: 1, hero: 77, why: "flag mines in the far east" }] }))).toContain("many_heroes");

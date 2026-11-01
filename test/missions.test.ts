@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BridgeClient } from "../src/bridge.js";
-import { collectSites, fightCandidates, goTo, type Site } from "../src/missions.js";
+import { collectSites, fightCandidates, goTo, isArmed, type Site } from "../src/missions.js";
 import { startFakeBridge } from "./fakeBridge.js";
 
 let cleanup: Array<() => unknown> = [];
@@ -52,5 +52,13 @@ describe("fightCandidates", () => {
 		expect(found.map(f => f.guard.id)).toEqual([2, 1]);
 		expect(found[0]?.behind.map(b => b.id)).toEqual([3]);
 		expect(found[1]?.behind).toEqual([]);
+	});
+});
+
+describe("isArmed", () => {
+	it("recognises a garrison, which is no monster stack but holds an army", () => {
+		expect(isArmed({ type: "garrisonVertical", subtype: "antiMagic", name: "Garrison" })).toBe(true);
+		expect(isArmed({ type: "monster", subtype: "zombieLord", name: "Zombies" })).toBe(false);
+		expect(isArmed({ type: "mine", subtype: "sawmill", name: "Sawmill" })).toBe(false);
 	});
 });

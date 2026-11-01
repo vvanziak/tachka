@@ -1,5 +1,5 @@
 import type { Brief, Decision } from "./king.js";
-import type { Site } from "./missions.js";
+import { isArmed, type Site } from "./missions.js";
 
 export interface Finding {
 	code: string;
@@ -90,7 +90,7 @@ export function reviewDecision(brief: Brief, decision: Decision): Finding[] {
 
 	for(const hero of facts.heroes) {
 		const sites = brief.sites[hero.id] ?? [];
-		const free = sites.filter(s => !s.threat && !s.visitedByHero && !s.visitedByUs);
+		const free = sites.filter(s => !s.threat && !isArmed(s) && !s.visitedByHero && !s.visitedByUs);
 		if(hero.movement >= 300 && !leaving.has(hero.id) && free.length > 0 && !facts.towns.some(t => near(t.pos, hero.pos, 0) && t.garrison === 0))
 			found.push({ code: "idle_hero", text: `${hero.name} (${hero.id}) has ${hero.movement} movement and ${free.length} reachable unvisited sites but no mission. If it is meant to stay, say what it is guarding or waiting for.` });
 	}
@@ -100,7 +100,15 @@ export function reviewDecision(brief: Brief, decision: Decision): Finding[] {
 		for(const s of sites)
 			if(s.threat)
 				monsters.set(`${s.pos.x},${s.pos.y},${s.pos.z}`, s);
+	const armed = new Map<string, Site>();
+	for(const sites of Object.values(brief.sites))
+		for(const s of sites)
+			if(isArmed(s))
+				armed.set(`${s.pos.x},${s.pos.y},${s.pos.z}`, s);
 	for(const m of decision.missions) {
+		const garrison = armed.get(`${m.target.x},${m.target.y},${m.target.z}`);
+		if(garrison)
+			found.push({ code: "armed_site", text: `Hero ${m.hero} is sent onto ${garrison.name} at ${m.target.x},${m.target.y}, which holds an army the brief gives no strength for: arriving starts a fight. Use \`inspect\` on it first, and do not go unless the odds are clear.` });
 		const target = monsters.get(`${m.target.x},${m.target.y},${m.target.z}`);
 		if(m.allowFight && target && (target.strengthRatio ?? 0) > 1)
 			found.push({ code: "bad_odds", text: `Hero ${m.hero} is ordered to fight ${target.name} (${target.size}, "${target.threat}", ratio ${target.strengthRatio}) at poor odds. Ratios above 1 mean they are stronger. Is this a deliberate sacrifice, and for what?` });

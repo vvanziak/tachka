@@ -410,6 +410,28 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		state.previousEnd = economy.treasuryAfter;
 	}
 
+	// the server refuses stack changes between objects that are not together; a merge only runs when they are
+	const mergedEarly = new Set<string>();
+	const doMerges = async (list: Decision["merge"], quiet: boolean) => {
+		if(list.length === 0)
+			return;
+		const now = await bridge.call<{ heroes: Hero[]; towns: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 });
+		const where = new Map<number, Pos>([...now.heroes.map(h => [h.id, h.pos] as const), ...now.towns.map(t => [t.id, t.pos] as const)]);
+		for(const m of list) {
+			const a = where.get(m.from);
+			const b = where.get(m.to);
+			if(!a || !b || a.z !== b.z || Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) > 1) {
+				if(!quiet)
+					deviations.push({ kind: "merge_not_together", from: m.from, to: m.to, fromPos: a, toPos: b, hint: "a hero must be in the town, or two heroes on adjacent tiles; walk there first" });
+				continue;
+			}
+			await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
+			mergedEarly.add(`${m.from}>${m.to}`);
+		}
+	};
+	// a merge between two objects that stand together now runs before anyone walks away: "merge the garrison and head north" means in that order
+	await doMerges(decision.merge, true);
+
 	const moves: JournalEntry["moves"] = [];
 	const remaining = new Map<number, { movement: number; pos: Pos; blocked: boolean }>();
 	if(!await runMissions(deps, state, decision.missions, remaining, moves, deviations)) {
@@ -422,21 +444,8 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		state.deviations = deviations;
 		return false;
 	}
-	// merges run before the leftover walk: a hero that reached its town takes the garrison along instead of walking off without it
-	if(decision.merge.length > 0) {
-		// the server refuses stack changes between objects that are not together; check first and tell the king
-		const now = await bridge.call<{ heroes: Hero[]; towns: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 });
-		const where = new Map<number, Pos>([...now.heroes.map(h => [h.id, h.pos] as const), ...now.towns.map(t => [t.id, t.pos] as const)]);
-		for(const m of decision.merge) {
-			const a = where.get(m.from);
-			const b = where.get(m.to);
-			if(!a || !b || a.z !== b.z || Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) > 1) {
-				deviations.push({ kind: "merge_not_together", from: m.from, to: m.to, fromPos: a, toPos: b, hint: "a hero must be in the town, or two heroes on adjacent tiles; walk there first" });
-				continue;
-			}
-			await rejected(`merge ${m.from} into ${m.to}`, () => bridge.call("move_army", m));
-		}
-	}
+	// merges that were not possible before the walks (the hero had to arrive first) run now
+	await doMerges(decision.merge.filter(m => !mergedEarly.has(`${m.from}>${m.to}`)), false);
 
 	let followUpTrace: unknown;
 	if(king.followUp) {

@@ -652,3 +652,41 @@ describe("meeting our own hero", () => {
 		expect(entry.moves[0]).toMatchObject({ reached: true });
 	});
 });
+
+describe("merge before the walk", () => {
+	it("merges the garrison into a hero standing in the town before the hero walks away", async () => {
+		const calls: string[] = [];
+		const server = await startFakeBridge((cmd) => {
+			if(["move_army", "move_hero"].includes(cmd))
+				calls.push(cmd);
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 9, week: 2, dayOfWeek: 2, resources: res({ gold: 100 }),
+					towns: [{ id: 36, name: "T", faction: "core:necropolis", pos: { x: 7, y: 18, z: 0 }, builtThisTurn: false, visitingHero: 5, garrisonHero: -1, buildings: [], recruitable: [], army: [{ creature: "core:skeleton", count: 94 }] }],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 7, y: 18, z: 0 }, movement: 1500, movementLimit: 1500, army: [], primarySkills: {} }],
+				};
+			case "targets":
+				return [];
+			case "get_buildable":
+				return [];
+			case "move_hero":
+				return { reached: true, pos: { x: 4, y: 13, z: 0 }, movement: 100, status: { pendingQuestions: [] } };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { decide: async () => ({ note: "merge, then go", missions: [{ hero: 5, target: { x: 4, y: 13, z: 0 }, intent: "go north" }], hire: [], merge: [{ from: 36, to: 5 }], trade: [], hold: [5] }) };
+
+		await playTurn({ tachka, king, journal: new Journal(file), memoryDays: 5 }, newLoopState());
+
+		expect(calls).toEqual(["move_army", "move_hero"]);
+		const entry = JSON.parse(readFileSync(file, "utf8").trim());
+		expect(entry.deviations.filter((d: { kind: string }) => d.kind === "merge_not_together")).toEqual([]);
+	});
+});

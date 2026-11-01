@@ -114,3 +114,22 @@ describe("factionNotes", () => {
 		expect(factionNotes(["core:castle"], [])).toContain("none seen yet");
 	});
 });
+
+describe("scenario", () => {
+	it("tells the king every player's faction from the start", async () => {
+		const { factionNotes, scenarioText } = await import("../src/factions.js");
+		const scenario = {
+			name: "Sands of Blood", description: "A desert.", victory: "Defeat all enemies", defeat: "Lose all towns", size: { x: 72, y: 72, z: 2 }, difficulty: 2, you: "blue",
+			players: [{ color: "red", name: "Valerii", human: true, faction: "core:stronghold", team: 0 }, { color: "blue", name: "AI", human: false, faction: "core:necropolis", team: 1 }, { color: "green", name: "AI", human: false, faction: "core:necropolis", team: 2 }],
+		};
+		const text = scenarioText(scenario);
+		expect(text).toContain("Sands of Blood, 72x72, 2 levels; difficulty hard; you are blue");
+		expect(text).toContain("red (human): stronghold, team 0");
+		expect(text).toContain("blue (you): necropolis");
+		const notes = factionNotes(["core:necropolis"], [], scenario);
+		expect(notes).toContain("red:");
+		expect(notes).toContain("Stronghold (Barbarian");
+		expect(notes).toContain("green:");
+		expect(notes).not.toContain("none seen yet");
+	});
+});

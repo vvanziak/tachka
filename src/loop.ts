@@ -9,7 +9,7 @@ import { renderBrief } from "./brief.js";
 import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
 import { collectFacts, type EconomyFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
-import { parseDecision, type Decision, type Brief, type King, type Memory } from "./king.js";
+import { parseDecision, type Decision, type Brief, type King, type Memory, type Scenario } from "./king.js";
 import { collectSites, goTo, isSafeToWalk, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
@@ -24,6 +24,8 @@ export interface LoopState {
 	turn: number;
 	/** The king's strategy memory, rewritten by its decisions. */
 	memory?: Memory;
+	/** The scenario information, asked once. */
+	scenario?: Scenario;
 	/** Our heroes as of the last turn, to notice one that vanished between turns. */
 	heroesSeen?: HeroSeen[];
 	/** Why the loop stopped: "game over", "connection lost", "failed turns", or undefined while running or when aborted. */
@@ -194,14 +196,14 @@ export function newLoopState(): LoopState {
 
 /** What must outlive a restart besides the journal: the plan, the treasury at the end of our last turn, the turn counter. */
 export function saveLoopState(path: string, state: LoopState): void {
-	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended, memory: state.memory, heroesSeen: state.heroesSeen }));
+	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended, memory: state.memory, heroesSeen: state.heroesSeen, scenario: state.scenario }));
 }
 
 export function loadLoopState(path: string): LoopState {
 	if(!existsSync(path))
 		return newLoopState();
 	const saved = JSON.parse(readFileSync(path, "utf8"));
-	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended, memory: saved.memory, heroesSeen: saved.heroesSeen };
+	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended, memory: saved.memory, heroesSeen: saved.heroesSeen, scenario: saved.scenario };
 }
 
 function mergeSites(perHero: Record<number, Site[]>): Site[] {
@@ -317,6 +319,12 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	}
 	deps.trace?.step("dialogs", { deviations: carried });
 
+	if(!state.scenario)
+		state.scenario = await bridge.call<Scenario>("scenario").then(r => Array.isArray(r?.players) ? r : undefined).catch(e => {
+			if(e instanceof BridgeError)
+				return undefined; // an older client does not know the command
+			throw e;
+		});
 	const facts = await collectFacts(bridge, state.previousEnd);
 	const sites: Record<number, Site[]> = {};
 	for(const hero of facts.heroes)
@@ -325,7 +333,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	deps.trace?.step("facts", { facts, sites });
 
 	const brief: Brief = {
-		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
+		scenario: state.scenario, facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
 		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: [...lostHeroNotices(state.heroesSeen, facts), ...tachka.drainEvents()], memory: state.memory,
 	};
 	state.heroesSeen = facts.heroes.map(h => ({ id: h.id, name: h.name, level: h.level, units: h.army.reduce((n, a) => n + a.count, 0), pos: h.pos }));

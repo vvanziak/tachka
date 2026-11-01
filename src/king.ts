@@ -85,7 +85,21 @@ export function parseDecision(json: unknown): Decision {
 }
 
 /** Everything the king sees when it decides. */
+/** What the scenario information window shows a human player. */
+export interface Scenario {
+	name: string;
+	description: string;
+	victory: string;
+	defeat: string;
+	size: { x: number; y: number; z: number };
+	/** 0 easy to 4 impossible. */
+	difficulty: number;
+	you: string;
+	players: Array<{ color: string; name: string; human: boolean; faction?: string; team?: number }>;
+}
+
 export interface Brief {
+	scenario?: Scenario;
 	facts: EconomyFacts;
 	plan: Plan | undefined;
 	/** Reachable sites per hero id. */

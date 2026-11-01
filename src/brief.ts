@@ -1,5 +1,5 @@
 import type { Brief } from "./king.js";
-import { factionNotes } from "./factions.js";
+import { factionNotes, scenarioText } from "./factions.js";
 import { fightCandidates, isArmed } from "./missions.js";
 import { PLAYER_COLORS } from "./protocol.js";
 import type { Resources } from "./state.js";
@@ -20,7 +20,9 @@ export function renderBrief(brief: Brief): string {
 	if(!objectives.length)
 		lines.push("  none yet: add one whenever the map shows something worth a plan");
 	lines.push("");
-	lines.push(factionNotes(facts.towns.map(t => t.faction), facts.threats), "");
+	if(brief.scenario)
+		lines.push(scenarioText(brief.scenario), "");
+	lines.push(factionNotes(facts.towns.map(t => t.faction), facts.threats, brief.scenario), "");
 	if(brief.memory) {
 		const m = brief.memory;
 		lines.push("YOUR STRATEGY MEMORY (you wrote it earlier; rewrite it in `memory` whenever it changes)");

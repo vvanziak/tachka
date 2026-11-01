@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BridgeClient } from "../src/bridge.js";
-import { collectSites, fightCandidates, goTo, isArmed, type Site } from "../src/missions.js";
+import { collectSites, fightCandidates, goTo, isArmed, isSafeToWalk, type Site } from "../src/missions.js";
 import { startFakeBridge } from "./fakeBridge.js";
 
 let cleanup: Array<() => unknown> = [];
@@ -60,5 +60,17 @@ describe("isArmed", () => {
 		expect(isArmed({ type: "garrisonVertical", subtype: "antiMagic", name: "Garrison" })).toBe(true);
 		expect(isArmed({ type: "monster", subtype: "zombieLord", name: "Zombies" })).toBe(false);
 		expect(isArmed({ type: "mine", subtype: "sawmill", name: "Sawmill" })).toBe(false);
+	});
+});
+
+describe("isSafeToWalk", () => {
+	const at = (type: string, owner: number, extra: object = {}) => ({ type, subtype: "", name: "x", owner, ...extra });
+	it("excludes heroes, towns, garrisons and anything a player owns", () => {
+		expect(isSafeToWalk(at("chest", -2))).toBe(true);
+		expect(isSafeToWalk(at("hero", 0))).toBe(false);
+		expect(isSafeToWalk(at("town", 3))).toBe(false);
+		expect(isSafeToWalk(at("mine", 3))).toBe(false);
+		expect(isSafeToWalk(at("garrisonVertical", -1))).toBe(false);
+		expect(isSafeToWalk(at("monster", -2, { threat: "weak" }))).toBe(false);
 	});
 });

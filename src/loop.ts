@@ -10,7 +10,7 @@ import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js"
 import { collectFacts, type EconomyFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
 import { parseDecision, type Decision, type Brief, type King, type Memory } from "./king.js";
-import { collectSites, goTo, isArmed, type MoveOutcome, type Pos, type Site } from "./missions.js";
+import { collectSites, goTo, isSafeToWalk, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
 import { RESOURCES, type Hero, type Recruitable, type Resources } from "./state.js";
 import type { Tachka } from "./core.js";
@@ -234,7 +234,7 @@ async function useLeftoverMovement(deps: LoopDeps, state: LoopState, facts: Econ
 			// a hero alone in an undefended town is its defender
 			if(facts.towns.some(t => t.pos.x === at.pos.x && t.pos.y === at.pos.y && t.pos.z === at.pos.z && t.garrison === 0 && !facts.heroes.some(h => h.id !== hero.id && h.pos.x === t.pos.x && h.pos.y === t.pos.y)))
 				break;
-			const sites = (await collectSites(bridge, hero.id, 25)).filter(s => !s.threat && !isArmed(s) && !s.visitedByHero && !s.visitedByUs && s.turns <= 1 && !visitedNow.has(`${s.pos.x},${s.pos.y},${s.pos.z}`));
+			const sites = (await collectSites(bridge, hero.id, 25)).filter(s => isSafeToWalk(s) && !s.visitedByHero && !s.visitedByUs && s.turns <= 1 && !visitedNow.has(`${s.pos.x},${s.pos.y},${s.pos.z}`));
 			const next = sites[0];
 			if(!next)
 				break;

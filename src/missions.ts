@@ -27,6 +27,10 @@ export interface Site {
 /** A site that holds an army without being a monster stack (a garrison): walking onto it starts a fight, and `targets` gives it no threat label. */
 export const isArmed = (site: Pick<Site, "type" | "subtype" | "name">): boolean => /garrison/i.test(`${site.type} ${site.subtype} ${site.name}`);
 
+/** A place automatic walking may go to: nothing that holds an army or belongs to a player, since arriving on it is an attack. */
+export const isSafeToWalk = (site: Pick<Site, "type" | "subtype" | "name" | "owner" | "threat">): boolean =>
+	!site.threat && !isArmed(site) && site.type !== "hero" && site.type !== "town" && site.owner < 0;
+
 export interface FightCandidate {
 	guard: Site;
 	/** Other objects within two tiles of the stack: what it most likely guards. */

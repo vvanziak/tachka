@@ -278,8 +278,14 @@ async function runMissions(deps: LoopDeps, state: LoopState, missions: Decision[
 				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
 				if(outcome.stopped === "battle waiting for orders")
 					await bridge.call("battle_act", { action: "autofight" });
+				// walking onto a tile where our own hero stands opens an exchange instead of moving: the meeting is the visit
+				const met = outcome.pendingQuestions.some(q => (q as { kind?: string }).kind === "hero_exchange");
 				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight, hero: mission.hero, reserved: state.plan ? reservedTotal(state.plan.reserves) : undefined })) {
 					return false;
+				}
+				if(met) {
+					outcome = { ...outcome, reached: true, stopped: undefined, pendingQuestions: [] };
+					break;
 				}
 				// the hero already stands on the target (a visit that opened a dialog): walking there again would only repeat the visit
 				const here = (await bridge.call<{ heroes?: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 })).heroes?.find(h => h.id === mission.hero)?.pos;
@@ -411,6 +417,11 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		return false;
 	}
 
+	// a mission can end with a dialog still open, and the server refuses stack changes until it is answered
+	if(!await settleQuestions(deps, deviations)) {
+		state.deviations = deviations;
+		return false;
+	}
 	// merges run before the leftover walk: a hero that reached its town takes the garrison along instead of walking off without it
 	if(decision.merge.length > 0) {
 		// the server refuses stack changes between objects that are not together; check first and tell the king

@@ -614,3 +614,41 @@ describe("follow-up round", () => {
 		expect(moved).toEqual([{ x: 3, y: 3 }, { x: 62, y: 62 }]);
 	});
 });
+
+describe("meeting our own hero", () => {
+	it("counts the exchange dialog as the visit instead of walking onto the tile again", async () => {
+		let walks = 0;
+		let open = false;
+		const server = await startFakeBridge((cmd, args: any) => {
+			switch(cmd) {
+			case "get_state":
+				return { day: 8, week: 2, dayOfWeek: 1, resources: res({ gold: 100 }), towns: [], heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 1, y: 1, z: 0 }, movement: 1500, movementLimit: 1500, army: [], primarySkills: {} }] };
+			case "targets":
+				return [];
+			case "status":
+				return { pendingQuestions: open ? [{ id: 50, kind: "hero_exchange", heroes: [5, 6] }] : [] };
+			case "answer_question":
+				open = false;
+				return {};
+			case "move_hero":
+				walks++;
+				open = true;
+				return { reached: false, pos: { x: 1, y: 1, z: 0 }, movement: 1200, status: { pendingQuestions: [{ id: 50, kind: "hero_exchange", heroes: [5, 6] }] } };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = { decide: async () => ({ note: "meet", missions: [{ hero: 5, target: { x: 2, y: 2, z: 0 }, intent: "meet hero 6" }], hire: [], merge: [], trade: [], hold: [5] }) };
+
+		await playTurn({ tachka, king, journal: new Journal(file), memoryDays: 5 }, newLoopState());
+
+		expect(walks).toBe(1);
+		const entry = JSON.parse(readFileSync(file, "utf8").trim());
+		expect(entry.moves[0]).toMatchObject({ reached: true });
+	});
+});

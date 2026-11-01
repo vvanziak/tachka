@@ -170,7 +170,7 @@ function config(path: string): Record<string, { index?: number; class?: string; 
 	return JSON.parse(text.replace(/,(\s*[}\]])/g, "$1"));
 }
 
-const manifest: { resources: string[]; creatures: string[]; heroes: Record<string, string>; towns: string[] } = { resources: [], creatures: [], heroes: {}, towns: [] };
+const manifest: { resources: string[]; creatures: string[]; heroes: Record<string, string>; towns: string[]; creatureNames: Record<string, string> } = { resources: [], creatures: [], heroes: {}, towns: [], creatureNames: {} };
 const write = (rel: string, image: Image) => {
 	mkdirSync(join(out, rel, ".."), { recursive: true });
 	writeFileSync(join(out, rel), png(image));
@@ -192,6 +192,21 @@ if(small) {
 			const frame = creature.index === undefined ? undefined : frames[creature.index + 2];
 			if(frame) { write(`creatures/${id.toLowerCase()}.png`, frame); manifest.creatures.push(id.toLowerCase()); }
 		}
+	}
+}
+
+// display names (singular and plural) from CRTRAITS.TXT, matched to creature ids by name, so the page can put an icon next to a name in text
+const creatureTraits = get("crtraits.txt");
+if(creatureTraits) {
+	const known = new Set(manifest.creatures);
+	for(const line of creatureTraits.toString("latin1").split("\r\n").slice(2)) {
+		const [singular, plural] = line.split("\t");
+		const normal = singular?.toLowerCase().replace(/[^a-z]/g, "");
+		const suffixed = normal ? manifest.creatures.filter(c => c.endsWith(normal)) : [];
+		const id = normal && known.has(normal) ? normal : suffixed.length === 1 ? suffixed[0] : undefined;
+		if(singular && plural && id)
+			for(const name of [singular, plural])
+				manifest.creatureNames[name.toLowerCase()] = id;
 	}
 }
 

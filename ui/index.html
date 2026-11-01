@@ -100,8 +100,20 @@ let paused = false, lastDay = 0;
 
 // icons come from the user's own game data (npm run assets); without them the page shows text only
 let assets = { resources: [], creatures: [], heroes: {}, towns: [] };
-fetch("/assets/manifest.json").then(r => r.ok ? r.json() : assets).then(m => { assets = m; if (lastFacts) showFacts(lastFacts); }).catch(() => {});
+fetch("/assets/manifest.json").then(r => r.ok ? r.json() : assets).then(m => { assets = m; nameRegex = undefined; if (lastFacts) showFacts(lastFacts); }).catch(() => {});
 let lastFacts;
+// "Dragon Flies" in running text becomes "Dragon Flies <icon>"; tags are left alone
+let nameRegex;
+function decorate(html) {
+  const names = Object.keys(assets.creatureNames || {});
+  if (!names.length) return html;
+  nameRegex ||= new RegExp("\\b(" + names.sort((a, b) => b.length - a.length).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b", "gi");
+  nameRegex.lastIndex = 0;
+  return html.split(/(<[^>]+>)/).map((part, i) => i % 2 ? part : part.replace(nameRegex, (m) => {
+    const id = assets.creatureNames[m.toLowerCase()];
+    return `${m}${id ? " " + img(`creatures/${id}.png`, m, 22) : ""}`;
+  })).join("");
+}
 const img = (path, title, size) => `<img class="icon" src="/assets/${path}" alt="" title="${esc(title)}" width="${size}" height="${size}">`;
 const resIcon = k => assets.resources.includes(k) ? img(`resources/${k}.png`, k, 22) : `<b>${esc(k)}</b>`;
 const creatureIcon = c => assets.creatures.includes(short(c).toLowerCase()) ? img(`creatures/${short(c).toLowerCase()}.png`, short(c), 28) : "";
@@ -111,13 +123,16 @@ const townIcon = faction => assets.towns.includes(short(faction)) ? img(`towns/$
 function add(cls, html) {
   const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
   const el = document.createElement("div");
-  el.className = cls; el.innerHTML = html; feed.appendChild(el);
+  el.className = cls; el.innerHTML = decorate(html); feed.appendChild(el);
   if (nearBottom) feed.scrollTop = feed.scrollHeight;
 }
 function status(text, busy) { const s = $("status"); s.textContent = text; s.classList.toggle("busy", !!busy); }
 function tokens(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
 
 const unit = (name, n, extra) => `<span title="${esc(short(name))}${extra ? " " + esc(extra) : ""}">${creatureIcon(name)}${n}${creatureIcon(name) ? "" : " " + esc(short(name))}</span>`;
+const HALLS = [["capitol", "Capitol"], ["cityHall", "City Hall"], ["townHall", "Town Hall"], ["villageHall", "Village Hall"]];
+const WALLS = [["castle", "Castle"], ["citadel", "Citadel"], ["fort", "Fort"]];
+const highest = (t, list) => { const have = t.buildings.map(short); const hit = list.find(([id]) => have.includes(id)); return hit ? hit[1] : "none"; };
 function townCard(t) {
   const dwellings = t.buildings.filter(b => /dwelling/i.test(b)).length;
   const stock = (t.stock || []).slice().sort((a, b) => a.level - b.level);
@@ -125,7 +140,9 @@ function townCard(t) {
   const total = garrison.reduce((n, a) => n + a.count, 0);
   const waiting = stock.reduce((n, s) => n + s.available, 0);
   return `<div class="town">${townIcon(t.faction)}<div>
-    <b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings · ${dwellings} dwellings${t.hasVisitingHero ? " · hero visiting" : ""}${t.hasGarrisonHero ? " · hero garrisoned" : ""}</span>
+    <b>${esc(t.name)}</b> <span class="muted">${esc(short(t.faction))} · ${t.buildings.length} buildings · ${dwellings} dwellings</span>
+    <div class="row"><span class="label">hall</span><b>${highest(t, HALLS)}</b><span class="label" style="min-width:0;margin-left:10px">walls</span><b>${highest(t, WALLS)}</b></div>
+    <span class="muted">${t.hasVisitingHero ? " · hero visiting" : ""}${t.hasGarrisonHero ? " · hero garrisoned" : ""}</span>
     <div class="row"><span class="label" title="Units waiting in the built dwellings; they are not ours until bought">in dwellings</span>${stock.length ? `<span class="army">${stock.map(s => `<span class="${s.available ? "" : "dim"}" title="level ${s.level} dwelling, ${s.available} available">${creatureIcon(s.creature)}${s.available}${creatureIcon(s.creature) ? "" : " " + esc(short(s.creature))}<small>L${s.level + 1}</small></span>`).join("")}</span><span class="muted"> ${waiting} to buy</span>` : '<span class="muted">no dwellings built</span>'}</div>
     <div class="row"><span class="label" title="Units we already bought that stand in the town's garrison">in garrison</span>${garrison.length ? `<span class="army">${garrison.map(a => unit(a.creature, a.count)).join("")}</span><span class="muted"> ${total} units</span>` : '<span class="muted">empty</span>'}</div>
   </div></div>`;

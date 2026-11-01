@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Brain } from "../src/brain.js";
 import type { Brief } from "../src/king.js";
-import { LlmKing, queryArgs } from "../src/llmKing.js";
+import { LlmKing, ModelUnavailableError, queryArgs } from "../src/llmKing.js";
 
 const usage = { inputTokens: 100, outputTokens: 10, costUsd: 0.01 };
 const res = { wood: 0, mercury: 0, ore: 0, sulfur: 0, crystal: 0, gems: 0, gold: 0 };
@@ -55,5 +55,18 @@ describe("LlmKing", () => {
 	it("sends only the fields a command takes", () => {
 		expect(queryArgs({ cmd: "get_buildable", town: 5, hero: 9 })).toEqual({ cmd: "get_buildable", args: { town: 5, all: true } });
 		expect(queryArgs({ cmd: "find_path", hero: 1, x: 2, y: 3, z: 0, name: "ignored" })).toEqual({ cmd: "find_path", args: { hero: 1, x: 2, y: 3, z: 0 } });
+	});
+});
+
+describe("LlmKing when the model is not available", () => {
+	it("says so instead of deciding blind", async () => {
+		const brain: Brain = { name: "fake", complete: async () => { throw new Error("claude CLI exited with 1: You've hit your session limit"); }, say: async () => ({ text: "", usage }) };
+		await expect(new LlmKing(brain).decide(brief)).rejects.toBeInstanceOf(ModelUnavailableError);
+	});
+
+	it("still falls back to standing still for an ordinary failure", async () => {
+		const brain: Brain = { name: "fake", complete: async () => { throw new Error("bad json"); }, say: async () => ({ text: "", usage }) };
+		const decision = await new LlmKing(brain).decide(brief);
+		expect(decision.missions).toEqual([]);
 	});
 });

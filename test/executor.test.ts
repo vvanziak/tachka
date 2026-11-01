@@ -120,3 +120,12 @@ describe("executePlan", () => {
 		expect(report.deviations).toEqual([{ kind: "rejected", town: 1, action: "build core:tavern", error: "built today" }]);
 	});
 });
+
+describe("recruiting where a creature and its upgrade share one stock", () => {
+	it("buys the upgrade first and does not ask for stock that is already gone", async () => {
+		const t = town(1, { recruitable: [stock(2, "core:wight", 7, 150), stock(2, "core:wraith", 7, 200), stock(1, "core:skeleton", 5, 50)] });
+		const { report, calls } = await run({ madeOnDay: 1, reviewByDay: 9, towns: [{ town: 1, recruit: { mode: "all" } }] }, facts([t], 5000));
+		expect(calls.filter(c => c.cmd === "recruit").map(c => `${c.args.creature}:${c.args.count}`)).toEqual(["core:wraith:7", "core:skeleton:5"]);
+		expect(report.deviations).toEqual([]);
+	});
+});

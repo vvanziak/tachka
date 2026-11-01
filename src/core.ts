@@ -77,6 +77,12 @@ export class Tachka {
 		this.inbox.push(text);
 	}
 
+	/** Puts back what a brief had taken when the turn is played again. */
+	restore(messages: string[], events: string[]): void {
+		this.inbox = [...messages, ...this.inbox];
+		this.events = [...events, ...this.events];
+	}
+
 	drainInbox(): string[] {
 		const messages = this.inbox;
 		this.inbox = [];

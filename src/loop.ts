@@ -9,6 +9,7 @@ import { renderBrief } from "./brief.js";
 import { executePlan, reservedTotal, type ExecutionReport } from "./executor.js";
 import { collectFacts, type EconomyFacts } from "./facts.js";
 import type { Journal, JournalEntry } from "./journal.js";
+import { ModelUnavailableError } from "./llmKing.js";
 import { parseDecision, type Decision, type Brief, type King, type Memory, type Scenario } from "./king.js";
 import { collectSites, goTo, isSafeToWalk, type MoveOutcome, type Pos, type Site } from "./missions.js";
 import type { Plan } from "./plan.js";
@@ -362,7 +363,15 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	state.heroesSeen = facts.heroes.map(h => ({ id: h.id, name: h.name, level: h.level, units: h.army.reduce((n, a) => n + a.count, 0), pos: h.pos }));
 	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable, garrisonArmy: t.garrisonArmy, hasVisitingHero: t.hasVisitingHero, hasGarrisonHero: t.hasGarrisonHero })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
 	deps.trace?.step("brief", renderBrief(brief));
-	let decision = parseDecision(await king.decide(brief));
+	let decision: Decision;
+	try {
+		decision = parseDecision(await king.decide(brief));
+	}
+	catch(e) {
+		if(e instanceof ModelUnavailableError)
+			tachka.restore(brief.messages, brief.events);
+		throw e;
+	}
 	deps.trace?.step("decision", { decision, model: king.trace?.() });
 	// the checks run on the first decision; the king gets one round to fix it or to say why the finding does not apply
 	const findings = reviewDecision(brief, decision);
@@ -403,9 +412,12 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	// trades come first: the plan builds with what they bring
 	for(const t of decision.trade) {
 		const have = facts.resources[t.give];
-		const amount = Math.min(t.amount, have);
+		// the market takes whole lots: 4 wood for 1 crystal means multiples of 4
+		const rate = facts.towns.find(x => x.id === t.town)?.rates?.find(r => r.give === t.give && r.get === t.get);
+		const lot = rate?.giveAmount ?? 1;
+		const amount = Math.floor(Math.min(t.amount, have) / lot) * lot;
 		if(amount <= 0) {
-			deviations.push({ kind: "trade_failed", trade: t, error: `no ${t.give} to give` });
+			deviations.push({ kind: "trade_failed", trade: t, error: have <= 0 ? `no ${t.give} to give` : `the rate is ${lot} ${t.give} for ${rate?.getAmount ?? 1} ${t.get}; you have ${have} and asked for ${t.amount}` });
 			continue;
 		}
 		try {
@@ -539,6 +551,7 @@ async function rescueTurn(deps: LoopDeps): Promise<void> {
 }
 
 const MAX_FAILED_TURNS = 3;
+const MODEL_RETRY_MS = 120_000;
 
 /** Plays until the turn limit, the end of the game, a lost connection, three failed turns in a row, or the signal aborts. */
 export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal; statePath?: string; resume?: boolean } = {}): Promise<LoopState> {
@@ -561,6 +574,13 @@ export async function playGame(deps: LoopDeps, options: { maxTurns?: number; sig
 			if(connectionLost(e)) {
 				state.ended = "connection lost";
 				break;
+			}
+			if(e instanceof ModelUnavailableError) {
+				// no orders were sent yet: wait for the model and play this turn again instead of letting the heroes stand still
+				state.turn--;
+				deps.tachka.publish({ type: "problem", text: `the model is not available (${e.message.slice(0, 160)}); trying this turn again in ${MODEL_RETRY_MS / 60_000} minutes` });
+				await sleep(MODEL_RETRY_MS);
+				continue;
 			}
 			failures++;
 			deps.tachka.publish({ type: "problem", text: `turn failed (${failures}/${MAX_FAILED_TURNS}): ${e instanceof Error ? e.message : String(e)}` });

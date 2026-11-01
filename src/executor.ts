@@ -91,17 +91,21 @@ async function recruitStep(bridge: BridgeClient, plan: TownPlan, town: TownFacts
 		return treasury;
 
 	let rest = treasury;
-	for(const entry of [...town.recruitable].sort((a, b) => b.level - a.level)) {
+	// a creature and its upgrade share the stock of one dwelling: what one takes is gone for the other; the upgrade is tried first
+	const left = new Map<number, number>();
+	for(const entry of [...town.recruitable].sort((a, b) => b.level - a.level || b.cost.gold - a.cost.gold)) {
 		if(mode === "levels" && !levels?.includes(entry.level))
 			continue;
+		const available = left.get(entry.level) ?? entry.available;
 		const budget = Object.fromEntries(RESOURCES.map(r => [r, Math.max(0, rest[r] - reserved[r])])) as Resources;
 		const counts = RESOURCES.map(r => entry.cost[r] > 0 ? Math.floor(budget[r] / entry.cost[r]) : Infinity);
-		const count = Math.min(entry.available, ...counts);
+		const count = Math.min(available, ...counts);
 		if(count <= 0)
 			continue;
 		if(await attempt(report, town.id, `recruit ${count} ${entry.creature}`, () => bridge.call("recruit", { town: town.id, creature: entry.creature, count }))) {
 			report.recruited.push({ town: town.id, creature: entry.creature, count });
 			rest = subtract(rest, entry.cost, count);
+			left.set(entry.level, available - count);
 		}
 	}
 	return rest;

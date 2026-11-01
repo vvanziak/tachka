@@ -12,6 +12,11 @@ const SYSTEM = readFileSync(join(import.meta.dirname, "..", "prompts", "king.md"
 const MAX_ASK_ROUNDS = 3;
 const MAX_ANSWER_CHARS = 2500;
 
+/** The model cannot answer at all (a usage limit, an overload): playing on without it would only lose the game. */
+export class ModelUnavailableError extends Error {}
+
+const UNAVAILABLE = /session limit|usage limit|rate.?limit|overloaded|too many requests|\b429\b|\b529\b/i;
+
 export interface LlmKingOptions {
 	onProblem?: (text: string) => void;
 	/** Runs a read-only game command for a question of the king. */
@@ -79,6 +84,8 @@ export class LlmKing implements King {
 			catch(e) {
 				lastError = e instanceof Error ? e.message : String(e);
 				this.rounds.push({ kind: "decide", attempt: attempt + 1, error: lastError });
+				if(UNAVAILABLE.test(lastError))
+					throw new ModelUnavailableError(lastError);
 				this.options.onProblem?.(`king attempt ${attempt + 1} failed: ${lastError}`);
 			}
 		}

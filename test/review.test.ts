@@ -97,3 +97,20 @@ describe("army left in the garrison", () => {
 		expect(reviewDecision(b([hero(9, 400)]), d()).map(f => f.code)).not.toContain("army_at_home");
 	});
 });
+
+describe("factionNotes", () => {
+	it("gives our faction and only the opponents that have been seen", async () => {
+		const { factionNotes } = await import("../src/factions.js");
+		const text = factionNotes(["core:castle"], [
+			{ type: "hero", class: "core:battlemage", ownerColor: "tan" },
+			{ type: "town", subtype: "necropolis", ownerColor: "green" },
+			{ type: "hero", class: "core:knight", ownerColor: "neutral" },
+		]);
+		expect(text).toContain("Castle (Knight, Cleric heroes)");
+		expect(text).toContain("tan:");
+		expect(text).toContain("Stronghold (Barbarian");
+		expect(text).toContain("green:");
+		expect(text).toContain("Necropolis (Death Knight");
+		expect(factionNotes(["core:castle"], [])).toContain("none seen yet");
+	});
+});

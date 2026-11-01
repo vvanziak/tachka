@@ -46,6 +46,14 @@ describe("reviewDecision", () => {
 		expect(codes(brief({ sites: { 1: [garrison] } }, { towns: [] }), go)).toContain("armed_site");
 	});
 
+	it("flags a merge whose two sides do not meet this turn, and accepts one that does", () => {
+		const away = { x: 20, y: 20, z: 0 };
+		const townId = 1;
+		const far = brief({}, { heroes: [{ ...hero(7, 10, away) }], towns: [town({ id: townId, garrison: 40 })] });
+		expect(codes(far, decision({ merge: [{ from: townId, to: 7 }], missions: [{ hero: 7, target: { x: 40, y: 40, z: 0 }, intent: "go" }] }))).toContain("merge_impossible");
+		expect(codes(far, decision({ merge: [{ from: townId, to: 7 }], missions: [{ hero: 7, target: pos, intent: "to town" }] }))).not.toContain("merge_impossible");
+	});
+
 	it("flags a hire that makes a third hero", () => {
 		const b = brief({}, { heroes: [hero(1), hero(2, 3, { x: 9, y: 9, z: 0 })] });
 		expect(codes(b, decision({ hire: [{ town: 1, hero: 77, why: "flag mines in the far east" }] }))).toContain("many_heroes");

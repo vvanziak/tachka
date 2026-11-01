@@ -9,7 +9,7 @@ import { defaultAnswer } from "../src/questions.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
 import { nextTurn } from "../src/turn.js";
-import { loadLoopState, lostHeroNotices, newLoopState, playGame, playTurn, saveLoopState } from "../src/loop.js";
+import { dangerAlerts, loadLoopState, lostHeroNotices, newLoopState, playGame, playTurn, saveLoopState } from "../src/loop.js";
 import type { Site } from "../src/missions.js";
 import type { Resources } from "../src/state.js";
 import { startFakeBridge } from "./fakeBridge.js";
@@ -688,5 +688,61 @@ describe("merge before the walk", () => {
 		expect(calls).toEqual(["move_army", "move_hero"]);
 		const entry = JSON.parse(readFileSync(file, "utf8").trim());
 		expect(entry.deviations.filter((d: { kind: string }) => d.kind === "merge_not_together")).toEqual([]);
+	});
+});
+
+describe("dangerAlerts", () => {
+	it("names strong enemy heroes near our heroes and ignores weak or far ones", () => {
+		const facts = {
+			heroes: [{ id: 1, name: "Tamika", pos: { x: 4, y: 12, z: 0 } }],
+			threats: [
+				{ type: "hero", name: "Isra", ownerColor: "tan", pos: { x: 4, y: 14, z: 0 }, strengthRatio: 2.2 },
+				{ type: "hero", name: "Fiona", ownerColor: "tan", pos: { x: 3, y: 13, z: 0 }, strengthRatio: 0.04 },
+				{ type: "hero", name: "Far", ownerColor: "green", pos: { x: 40, y: 40, z: 0 }, strengthRatio: 3 },
+				{ type: "town", name: "Town", ownerColor: "tan", pos: { x: 4, y: 13, z: 0 }, strengthRatio: 5 },
+			],
+		} as unknown as EconomyFacts;
+		const alerts = dangerAlerts(facts);
+		expect(alerts).toHaveLength(1);
+		expect(alerts[0]?.text).toContain("Isra (tan, ratio 2.2");
+		expect(alerts[0]?.heroes).toEqual([1]);
+	});
+});
+
+describe("alert round", () => {
+	it("lets the king react to a strong enemy hero near its heroes even when no movement is left", async () => {
+		const calls: string[] = [];
+		const server = await startFakeBridge((cmd) => {
+			if(cmd === "move_army")
+				calls.push(cmd);
+			switch(cmd) {
+			case "get_state":
+				return { day: 16, week: 3, dayOfWeek: 2, resources: res({ gold: 0 }), towns: [], heroes: [
+					{ id: 1, name: "Tamika", class: "", level: 1, pos: { x: 4, y: 12, z: 0 }, movement: 0, movementLimit: 1500, army: [], primarySkills: {} },
+					{ id: 2, name: "Galthran", class: "", level: 1, pos: { x: 4, y: 13, z: 0 }, movement: 0, movementLimit: 1500, army: [], primarySkills: {} },
+				] };
+			case "threats":
+				return { enemies: [{ type: "hero", name: "Isra", ownerColor: "tan", pos: { x: 4, y: 14, z: 0 }, strengthRatio: 2.2 }] };
+			case "targets":
+				return [];
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		let report = "";
+		const king = {
+			decide: async () => ({ note: "stay", missions: [], hire: [], merge: [], trade: [], hold: [] }),
+			followUp: async (_b: unknown, r: string) => { report = r; return { note: "join", missions: [], hire: [], merge: [{ from: 1, to: 2 }], trade: [], hold: [] }; },
+		};
+
+		await playTurn({ tachka, king, journal: new Journal(file), memoryDays: 5 }, newLoopState());
+
+		expect(report).toContain("ALERT: Isra (tan");
+		expect(calls).toEqual(["move_army"]);
 	});
 });

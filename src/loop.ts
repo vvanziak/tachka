@@ -53,6 +53,23 @@ export function lostHeroNotices(before: HeroSeen[] | undefined, facts: EconomyFa
 	});
 }
 
+const DANGER_TILES = 10;
+const DANGER_RATIO = 0.8;
+
+/** Enemy heroes that are about as strong as ours or stronger and close to one of our heroes: what can still go wrong before the turn ends. */
+export function dangerAlerts(facts: EconomyFacts): Array<{ text: string; heroes: number[] }> {
+	const out: Array<{ text: string; heroes: number[] }> = [];
+	for(const t of facts.threats) {
+		const pos = t.pos as Pos | undefined;
+		if(t.type !== "hero" || t.ownerColor === "neutral" || !pos || !(Number(t.strengthRatio) > DANGER_RATIO))
+			continue;
+		const close = facts.heroes.filter(h => h.pos.z === pos.z && Math.max(Math.abs(h.pos.x - pos.x), Math.abs(h.pos.y - pos.y)) <= DANGER_TILES);
+		if(close.length > 0)
+			out.push({ text: `${String(t.name)} (${String(t.ownerColor)}, ratio ${String(t.strengthRatio)} against your strongest hero) is at ${pos.x},${pos.y}, within ${DANGER_TILES} tiles of ${close.map(h => `${h.name} (${h.id}) at ${h.pos.x},${h.pos.y}`).join(", ")}`, heroes: close.map(h => h.id) });
+	}
+	return out;
+}
+
 export interface LoopDeps {
 	tachka: Tachka;
 	king: King;
@@ -452,25 +469,30 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		// the king sees what the missions left and decides about the heroes that still have movement; nothing walks on its own
 		const fresh = await collectFacts(bridge, state.previousEnd);
 		const idle = fresh.heroes.filter(h => !decision.hold.includes(h.id) && !remaining.get(h.id)?.blocked && h.movement >= MOVEMENT_LEFT_TO_KEEP_GOING * (h.movementLimit ?? h.movement));
-		if(idle.length > 0) {
+		// the missions may have brought a hero into the reach of an enemy hero: the king gets a last look before the turn ends
+		const alerts = dangerAlerts(fresh);
+		if(idle.length > 0 || alerts.length > 0) {
 			const freshSites: Record<number, Site[]> = {};
 			for(const hero of fresh.heroes)
 				freshSites[hero.id] = await collectSites(bridge, hero.id, 40);
 			const report = [
 				...moves.map(m => `- hero ${m.hero}: ${m.intent} -> ${m.reached ? "done" : m.stopped ?? "not reached"}`),
 				...(deviations.length ? [`problems so far: ${JSON.stringify(deviations).slice(0, 800)}`] : []),
-				`heroes with movement left: ${idle.map(h => `${h.name} (${h.id}) at ${h.pos.x},${h.pos.y} with ${h.movement}/${h.movementLimit ?? h.movement}`).join("; ")}`,
+				...alerts.map(a => `ALERT: ${a.text}`),
+				`heroes with movement left: ${idle.map(h => `${h.name} (${h.id}) at ${h.pos.x},${h.pos.y} with ${h.movement}/${h.movementLimit ?? h.movement}`).join("; ") || "none"}`,
 			].join("\n");
 			const followBrief: Brief = { ...brief, facts: fresh, sites: freshSites, blockers: collectBlockers(fresh, mergeSites(freshSites)), deviations, events: tachka.drainEvents(), messages: [] };
 			const more = parseDecision(await king.followUp(followBrief, report));
-			const idleIds = new Set(idle.map(h => h.id));
-			const missions = more.missions.filter(m => idleIds.has(m.hero));
+			const mayMove = new Set([...idle.map(h => h.id), ...alerts.flatMap(a => a.heroes)]);
+			const missions = more.missions.filter(m => mayMove.has(m.hero));
 			followUpTrace = { report, decision: more, used: missions.length };
 			const rest = new Map<number, { movement: number; pos: Pos; blocked: boolean }>();
 			if(!await runMissions(deps, state, missions, rest, moves, deviations)) {
 				state.deviations = deviations;
 				return false;
 			}
+			// heroes that stand together can still join their armies, which costs no movement
+			await doMerges(more.merge.filter(m => !mergedEarly.has(`${m.from}>${m.to}`)), false);
 		}
 	}
 	else if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {

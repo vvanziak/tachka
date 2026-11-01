@@ -106,7 +106,7 @@ export class LlmKing implements King {
 	}
 
 	async followUp(brief: Brief, report: string): Promise<Decision> {
-		const prompt = `${renderBrief(brief)}\n\nTHIS TURN SO FAR (your orders were carried out; the brief above is fresh)\n${report}\n\nThe heroes named above still have movement left. Answer with \`missions\` for them only: several entries for one hero are walked in order until its movement runs out. Leave plan, hire, merge, trade and memory out and \`ask\` empty. A hero that should stay goes in \`hold\`, and \`note\` says why. Never send a hero onto a hero, a town or an armed site unless you mean to fight (allowFight).`;
+		const prompt = `${renderBrief(brief)}\n\nTHIS TURN SO FAR (your orders were carried out; the brief above is fresh)\n${report}\n\nIf an ALERT is listed, protect your heroes first: pull heroes together and join their armies (\`merge\`, which needs them on the same or adjacent tiles), fall back into a town, or hold; a hero ends this turn where it stands, and the enemy moves next. Then spend the movement that is left. Answer with \`missions\` for the heroes named above (several entries for one hero are walked in order until its movement runs out) and \`merge\` if heroes can join. Leave plan, hire, trade and memory out and \`ask\` empty. A hero that should stay goes in \`hold\`, and \`note\` says why. Never send a hero onto a hero, a town or an armed site unless you mean to fight (allowFight).`;
 		try {
 			const sent = Date.now();
 			const reply = await this.brain.complete(SYSTEM, prompt, this.schema);

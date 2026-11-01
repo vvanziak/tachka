@@ -58,6 +58,17 @@ export function reviewDecision(brief: Brief, decision: Decision): Finding[] {
 		}
 	}
 
+	// a merge only runs when both sides stand together at that moment or after the walks; an order for a meeting that will not happen does nothing
+	const posOf = (id: number) => facts.heroes.find(h => h.id === id)?.pos ?? facts.towns.find(t => t.id === id)?.pos;
+	const endOf = (id: number) => decision.missions.filter(m => m.hero === id).at(-1)?.target ?? posOf(id);
+	const together = (a: { x: number; y: number; z: number } | undefined, b: { x: number; y: number; z: number } | undefined) => !!a && !!b && a.z === b.z && near(a, b, 1);
+	for(const m of decision.merge) {
+		if(together(posOf(m.from), posOf(m.to)) || together(endOf(m.from), endOf(m.to)))
+			continue;
+		const from = posOf(m.from), to = posOf(m.to), end = endOf(m.to);
+		found.push({ code: "merge_impossible", text: `The merge of ${m.from} into ${m.to} cannot happen this turn: ${m.from} is at ${from?.x},${from?.y} and hero ${m.to} stands at ${to?.x},${to?.y}${end && to && (end.x !== to.x || end.y !== to.y) ? ` and ends its missions at ${end.x},${end.y}` : ""}. A merge needs both to stand together (a hero in the town, or two heroes on adjacent tiles). Give hero ${m.to} a first mission to the tile of ${m.from} (${from?.x},${from?.y}), or drop the merge. Units in a garrison do not fight until a hero takes them.` });
+	}
+
 	const newHeroes = facts.heroes.length + decision.hire.length;
 	if(decision.hire.length > 0 && newHeroes > 2) {
 		const sizes = facts.heroes.map(h => `${h.name} ${h.army.reduce((n, a) => n + a.count, 0)} units`).join(", ");

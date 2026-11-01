@@ -551,7 +551,6 @@ async function rescueTurn(deps: LoopDeps): Promise<void> {
 }
 
 const MAX_FAILED_TURNS = 3;
-const MODEL_RETRY_MS = 120_000;
 
 /** Plays until the turn limit, the end of the game, a lost connection, three failed turns in a row, or the signal aborts. */
 export async function playGame(deps: LoopDeps, options: { maxTurns?: number; signal?: AbortSignal; statePath?: string; resume?: boolean } = {}): Promise<LoopState> {
@@ -576,10 +575,10 @@ export async function playGame(deps: LoopDeps, options: { maxTurns?: number; sig
 				break;
 			}
 			if(e instanceof ModelUnavailableError) {
-				// no orders were sent yet: wait for the model and play this turn again instead of letting the heroes stand still
+				// no orders were sent yet: the game is paused and this turn is played again when the human resumes
 				state.turn--;
-				deps.tachka.publish({ type: "problem", text: `the model is not available (${e.message.slice(0, 160)}); trying this turn again in ${MODEL_RETRY_MS / 60_000} minutes` });
-				await sleep(MODEL_RETRY_MS);
+				deps.tachka.pause();
+				deps.tachka.publish({ type: "problem", text: `the model is not available (${e.message.slice(0, 160)}). The game is paused: resume when the limit is lifted or funds are added, and this turn is played again` });
 				continue;
 			}
 			failures++;

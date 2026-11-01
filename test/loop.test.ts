@@ -746,3 +746,39 @@ describe("alert round", () => {
 		expect(calls).toEqual(["move_army"]);
 	});
 });
+
+describe("model unavailable", () => {
+	it("pauses the game and plays the turn again after the human resumes", async () => {
+		const server = await startFakeBridge((cmd) => {
+			switch(cmd) {
+			case "get_state":
+				return { day: 4, week: 1, dayOfWeek: 4, resources: res({ gold: 0 }), towns: [], heroes: [] };
+			case "targets":
+				return [];
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const { ModelUnavailableError } = await import("../src/llmKing.js");
+		const problems: string[] = [];
+		tachka.subscribe(e => { if(e.type === "problem") problems.push(e.text); });
+		let asked = 0;
+		const king = { decide: async () => {
+			if(asked++ === 0)
+				throw new ModelUnavailableError("You've hit your session limit");
+			return { note: "ok", missions: [], hire: [], merge: [], trade: [], hold: [] };
+		} };
+		setTimeout(() => { expect(tachka.isPaused).toBe(true); tachka.resume(); }, 300);
+
+		const state = await playGame({ tachka, king, journal: new Journal(file), memoryDays: 5 }, { maxTurns: 1 });
+
+		expect(asked).toBe(2);
+		expect(state.turn).toBe(1);
+		expect(problems[0]).toContain("The game is paused");
+	});
+});

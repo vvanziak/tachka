@@ -20,6 +20,12 @@ export const memorySchema = z.object({
 	deferred: z.array(z.object({ what: z.string().max(140), unlock: z.string().max(180) }).strict()).max(12).default([]),
 	/** The opponent, the risks, what to watch. */
 	watch: z.string().max(500).optional(),
+	/** Mid-term objectives found while exploring (a strong artifact, a University, a teleport spell, a mine); the map sets the global one. */
+	objectives: z.array(z.object({
+		what: z.string().max(140),
+		where: z.string().max(80).optional(),
+		status: z.enum(["open", "in_progress", "done", "dropped"]),
+	}).strict()).max(15).default([]),
 }).strict();
 
 export type Memory = z.infer<typeof memorySchema>;

@@ -32,7 +32,7 @@ describe("LlmKing", () => {
 		expect(asked).toEqual(['inspect {"id":77,"hero":3}']);
 		expect(prompts[1]).toContain('ANSWERS TO YOUR QUESTIONS (round 1)');
 		expect(prompts[1]).toContain('"threat":"weak"');
-		expect(decision.memory).toEqual(memory);
+		expect(decision.memory).toEqual({ ...memory, objectives: [] });
 		expect(king.usage().last.inputTokens).toBe(200);
 	});
 

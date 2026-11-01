@@ -10,6 +10,15 @@ const money = (r: Partial<Resources>) => Object.entries(r).filter(([, v]) => v).
 export function renderBrief(brief: Brief): string {
 	const { facts } = brief;
 	const lines: string[] = [];
+	lines.push("OBJECTIVES");
+	lines.push("global (set by the map; unless it says otherwise): eliminate every opponent, so take their towns and defeat their heroes while keeping ours.");
+	lines.push("mid-term (yours, found while exploring the map; keep them in `memory.objectives`):");
+	const objectives = brief.memory?.objectives ?? [];
+	for(const o of objectives)
+		lines.push(`  [${o.status}] ${o.what}${o.where ? ` (${o.where})` : ""}`);
+	if(!objectives.length)
+		lines.push("  none yet: add one whenever the map shows something worth a plan");
+	lines.push("");
 	if(brief.memory) {
 		const m = brief.memory;
 		lines.push("YOUR STRATEGY MEMORY (you wrote it earlier; rewrite it in `memory` whenever it changes)");

@@ -66,7 +66,8 @@ describe("isArmed", () => {
 describe("isSafeToWalk", () => {
 	const at = (type: string, owner: number, extra: object = {}) => ({ type, subtype: "", name: "x", owner, ...extra });
 	it("excludes heroes, towns, garrisons and anything a player owns", () => {
-		expect(isSafeToWalk(at("chest", -2))).toBe(true);
+		expect(isSafeToWalk(at("treasureChest", -2))).toBe(true);
+		expect(isSafeToWalk(at("treeOfKnowledge", -2))).toBe(false);
 		expect(isSafeToWalk(at("hero", 0))).toBe(false);
 		expect(isSafeToWalk(at("town", 3))).toBe(false);
 		expect(isSafeToWalk(at("mine", 3))).toBe(false);

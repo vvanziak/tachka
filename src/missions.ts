@@ -27,9 +27,16 @@ export interface Site {
 /** A site that holds an army without being a monster stack (a garrison): walking onto it starts a fight, and `targets` gives it no threat label. */
 export const isArmed = (site: Pick<Site, "type" | "subtype" | "name">): boolean => /garrison/i.test(`${site.type} ${site.subtype} ${site.name}`);
 
-/** A place automatic walking may go to: nothing that holds an army or belongs to a player, since arriving on it is an attack. */
+/** Objects that are free to visit and cannot start a fight; anything not listed is left to the king. */
+const HARMLESS_TYPES = new Set([
+	"resource", "treasureChest", "campfire", "artifact", "windmill", "waterWheel", "mysticalGarden", "learningStone", "fountainOfFortune", "fountainOfYouth",
+	"magicWell", "faerieRing", "temple", "stables", "redwoodObservatory", "starAxis", "shrineOfMagicLevel1", "shrineOfMagicLevel2", "shrineOfMagicLevel3",
+	"obelisk", "idolOfFortune", "rallyFlag", "swanPond", "gardenOfRevelation", "marlettoTower", "witchHut", "mercenaryCamp", "mine", "creatureGeneratorCommon",
+]);
+
+/** A place automatic walking may go to: a harmless object that no player owns. */
 export const isSafeToWalk = (site: Pick<Site, "type" | "subtype" | "name" | "owner" | "threat">): boolean =>
-	!site.threat && !isArmed(site) && site.type !== "hero" && site.type !== "town" && site.owner < 0;
+	HARMLESS_TYPES.has(site.type) && !site.threat && !isArmed(site) && site.owner < 0;
 
 export interface FightCandidate {
 	guard: Site;

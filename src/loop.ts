@@ -263,6 +263,45 @@ async function useLeftoverMovement(deps: LoopDeps, state: LoopState, facts: Econ
 	return true;
 }
 
+/** Walks the missions in order; a dialog or a fight on the way is settled and the walk resumes. Returns false when the loop must stop. */
+async function runMissions(deps: LoopDeps, state: LoopState, missions: Decision["missions"], remaining: Map<number, { movement: number; pos: Pos; blocked: boolean }>, moves: JournalEntry["moves"], deviations: unknown[]): Promise<boolean> {
+	const bridge = deps.tachka.bridge;
+	for(const mission of missions) {
+		// a dialog (chest, level-up) interrupts the walk; after answering it the same mission resumes
+		let outcome: MoveOutcome;
+		try {
+			outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
+			const interrupted = (o: MoveOutcome) => o.pendingQuestions.length > 0 || o.stopped === "battle waiting for orders";
+			for(let resume = 0; resume < 4 && interrupted(outcome); resume++) {
+				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
+				if(outcome.stopped === "battle waiting for orders")
+					await bridge.call("battle_act", { action: "autofight" });
+				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight, hero: mission.hero, reserved: state.plan ? reservedTotal(state.plan.reserves) : undefined })) {
+					return false;
+				}
+				// the hero already stands on the target (a visit that opened a dialog): walking there again would only repeat the visit
+				const here = (await bridge.call<{ heroes?: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 })).heroes?.find(h => h.id === mission.hero)?.pos;
+				if(here && here.x === mission.target.x && here.y === mission.target.y && here.z === mission.target.z) {
+					outcome = { ...outcome, reached: true, stopped: undefined, pendingQuestions: [] };
+					break;
+				}
+				outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
+			}
+		}
+		catch(e) {
+			if(!(e instanceof BridgeError))
+				throw e;
+			deviations.push({ kind: "rejected", action: `move hero ${mission.hero}`, error: e.message });
+			continue;
+		}
+		moves.push({ hero: mission.hero, target: mission.target, intent: mission.intent, reached: outcome.reached || outcome.visited === true, stopped: outcome.stopped });
+		remaining.set(mission.hero, { movement: outcome.movement, pos: outcome.pos, blocked: outcome.stopped !== undefined && outcome.stopped !== "not enough movement points this turn" });
+		if(outcome.stopped === "guarded")
+			deviations.push({ kind: "guarded", hero: mission.hero, guard: outcome.guard, intent: mission.intent });
+	}
+	return true;
+}
+
 /** One turn: gather facts, ask the king, carry the decision out, record it. Returns false when the loop must stop. */
 export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolean> {
 	const { tachka, king, journal } = deps;
@@ -359,39 +398,9 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	const moves: JournalEntry["moves"] = [];
 	const remaining = new Map<number, { movement: number; pos: Pos; blocked: boolean }>();
-	for(const mission of decision.missions) {
-		// a dialog (chest, level-up) interrupts the walk; after answering it the same mission resumes
-		let outcome: MoveOutcome;
-		try {
-			outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
-			const interrupted = (o: MoveOutcome) => o.pendingQuestions.length > 0 || o.stopped === "battle waiting for orders";
-			for(let resume = 0; resume < 4 && interrupted(outcome); resume++) {
-				// a fight that started during the walk is fought out now so the mission and the rest of the turn go on
-				if(outcome.stopped === "battle waiting for orders")
-					await bridge.call("battle_act", { action: "autofight" });
-				if(!await settleQuestions(deps, deviations, { allowFight: mission.allowFight, hero: mission.hero, reserved: state.plan ? reservedTotal(state.plan.reserves) : undefined })) {
-					state.deviations = deviations;
-					return false;
-				}
-				// the hero already stands on the target (a visit that opened a dialog): walking there again would only repeat the visit
-				const here = (await bridge.call<{ heroes?: Array<{ id: number; pos: Pos }> }>("get_state", { radius: 0 })).heroes?.find(h => h.id === mission.hero)?.pos;
-				if(here && here.x === mission.target.x && here.y === mission.target.y && here.z === mission.target.z) {
-					outcome = { ...outcome, reached: true, stopped: undefined, pendingQuestions: [] };
-					break;
-				}
-				outcome = await goTo(bridge, mission.hero, mission.target, { allowFight: mission.allowFight });
-			}
-		}
-		catch(e) {
-			if(!(e instanceof BridgeError))
-				throw e;
-			deviations.push({ kind: "rejected", action: `move hero ${mission.hero}`, error: e.message });
-			continue;
-		}
-		moves.push({ hero: mission.hero, target: mission.target, intent: mission.intent, reached: outcome.reached || outcome.visited === true, stopped: outcome.stopped });
-		remaining.set(mission.hero, { movement: outcome.movement, pos: outcome.pos, blocked: outcome.stopped !== undefined && outcome.stopped !== "not enough movement points this turn" });
-		if(outcome.stopped === "guarded")
-			deviations.push({ kind: "guarded", hero: mission.hero, guard: outcome.guard, intent: mission.intent });
+	if(!await runMissions(deps, state, decision.missions, remaining, moves, deviations)) {
+		state.deviations = deviations;
+		return false;
 	}
 
 	// merges run before the leftover walk: a hero that reached its town takes the garrison along instead of walking off without it
@@ -410,7 +419,33 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		}
 	}
 
-	if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {
+	let followUpTrace: unknown;
+	if(king.followUp) {
+		// the king sees what the missions left and decides about the heroes that still have movement; nothing walks on its own
+		const fresh = await collectFacts(bridge, state.previousEnd);
+		const idle = fresh.heroes.filter(h => !decision.hold.includes(h.id) && !remaining.get(h.id)?.blocked && h.movement >= MOVEMENT_LEFT_TO_KEEP_GOING * (h.movementLimit ?? h.movement));
+		if(idle.length > 0) {
+			const freshSites: Record<number, Site[]> = {};
+			for(const hero of fresh.heroes)
+				freshSites[hero.id] = await collectSites(bridge, hero.id, 40);
+			const report = [
+				...moves.map(m => `- hero ${m.hero}: ${m.intent} -> ${m.reached ? "done" : m.stopped ?? "not reached"}`),
+				...(deviations.length ? [`problems so far: ${JSON.stringify(deviations).slice(0, 800)}`] : []),
+				`heroes with movement left: ${idle.map(h => `${h.name} (${h.id}) at ${h.pos.x},${h.pos.y} with ${h.movement}/${h.movementLimit ?? h.movement}`).join("; ")}`,
+			].join("\n");
+			const followBrief: Brief = { ...brief, facts: fresh, sites: freshSites, blockers: collectBlockers(fresh, mergeSites(freshSites)), deviations, events: tachka.drainEvents(), messages: [] };
+			const more = parseDecision(await king.followUp(followBrief, report));
+			const idleIds = new Set(idle.map(h => h.id));
+			const missions = more.missions.filter(m => idleIds.has(m.hero));
+			followUpTrace = { report, decision: more, used: missions.length };
+			const rest = new Map<number, { movement: number; pos: Pos; blocked: boolean }>();
+			if(!await runMissions(deps, state, missions, rest, moves, deviations)) {
+				state.deviations = deviations;
+				return false;
+			}
+		}
+	}
+	else if(!await useLeftoverMovement(deps, state, facts, decision, remaining, moves, deviations)) {
 		state.deviations = deviations;
 		return false;
 	}
@@ -423,7 +458,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 		if(!heroes.some(x => x.id === h.hero))
 			deviations.push({ kind: "hire_failed", hero: h.hero, town: h.town });
 	}
-	deps.trace?.step("orders", { orders: { hire: decision.hire, merge: decision.merge, hold: decision.hold }, plan: state.plan, economy, moves, deviations });
+	deps.trace?.step("orders", { orders: { hire: decision.hire, merge: decision.merge, hold: decision.hold }, plan: state.plan, economy, moves, deviations, followUp: followUpTrace });
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,

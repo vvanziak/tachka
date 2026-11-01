@@ -108,6 +108,8 @@ export interface King {
 	revise?(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision>;
 	/** Cost of the last decision and the running total, for kings that call a model. */
 	usage?(): { last: KingUsage; total: KingUsage; ms: number };
+	/** A second, short round after the missions ran: the heroes that still have movement get further missions. `report` says what happened so far. */
+	followUp?(brief: Brief, report: string): Promise<Decision>;
 	/** What the model was sent and answered for the last decision (for the debug trace). */
 	trace?(): unknown[];
 }

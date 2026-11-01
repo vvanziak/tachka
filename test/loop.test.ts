@@ -572,3 +572,45 @@ describe("trade orders", () => {
 		expect(entry.deviations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "trade_failed", error: expect.stringContaining("4 ore") })]));
 	});
 });
+
+describe("follow-up round", () => {
+	it("asks the king about heroes with movement left and walks only what it orders", async () => {
+		const moved: Array<{ x: number; y: number }> = [];
+		let walks = 0;
+		const server = await startFakeBridge((cmd, args: any) => {
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 6, week: 1, dayOfWeek: 6, resources: res({ gold: 100 }), towns: [],
+					heroes: [{ id: 5, name: "H", class: "", level: 1, pos: { x: 0, y: 0, z: 0 }, movement: walks > 0 ? 900 : 1500, movementLimit: 1500, army: [], primarySkills: {} }],
+				};
+			case "targets":
+				return [site(62, "treasureChest", "", "Chest", 0), { ...site(70, "hero", "battlemage", "Terek", 0), owner: 0 }];
+			case "move_hero":
+				walks++;
+				moved.push({ x: args.x, y: args.y });
+				return { reached: true, pos: { x: args.x, y: args.y, z: 0 }, movement: 900, status: { pendingQuestions: [] } };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return {};
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		let reports = "";
+		const king = {
+			decide: async () => ({ note: "go", missions: [{ hero: 5, target: { x: 3, y: 3, z: 0 }, intent: "first" }], hire: [], merge: [], trade: [], hold: [] }),
+			followUp: async (_brief: unknown, report: string) => {
+				reports = report;
+				return { note: "more", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "chest" }, { hero: 99, target: { x: 1, y: 1, z: 0 }, intent: "not mine" }], hire: [], merge: [], trade: [], hold: [] };
+			},
+		};
+
+		await playTurn({ tachka, king, journal: new Journal(file), memoryDays: 5 }, newLoopState());
+
+		expect(reports).toContain("heroes with movement left");
+		expect(moved).toEqual([{ x: 3, y: 3 }, { x: 62, y: 62 }]);
+	});
+});

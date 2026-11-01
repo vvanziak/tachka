@@ -24,8 +24,31 @@ export interface LoopState {
 	turn: number;
 	/** The king's strategy memory, rewritten by its decisions. */
 	memory?: Memory;
+	/** Our heroes as of the last turn, to notice one that vanished between turns. */
+	heroesSeen?: HeroSeen[];
 	/** Why the loop stopped: "game over", "connection lost", "failed turns", or undefined while running or when aborted. */
 	ended?: string;
+}
+
+export interface HeroSeen {
+	id: number;
+	name: string;
+	level: number;
+	units: number;
+	pos: Pos;
+}
+
+const NEAR_LOST_HERO_TILES = 14;
+
+/** Heroes that were ours at the last turn and are gone now: the king must be told, a death in the opponents' turn leaves no other trace. */
+export function lostHeroNotices(before: HeroSeen[] | undefined, facts: EconomyFacts): string[] {
+	const now = new Set(facts.heroes.map(h => h.id));
+	return (before ?? []).filter(h => !now.has(h.id)).map(h => {
+		const near = facts.threats
+			.filter(t => t.type === "hero" && t.ownerColor !== "neutral" && t.pos && Math.max(Math.abs((t.pos as Pos).x - h.pos.x), Math.abs((t.pos as Pos).y - h.pos.y)) <= NEAR_LOST_HERO_TILES)
+			.map(t => `${String(t.name)} (${String(t.ownerColor)}) at ${(t.pos as Pos).x},${(t.pos as Pos).y}`);
+		return `YOUR HERO ${h.name} (level ${h.level}, ${h.units} units, last seen at ${h.pos.x},${h.pos.y}) IS GONE since your last turn: it died or was captured, most likely attacked by an enemy hero during the opponents' turn. ${near.length ? `Enemy heroes visible near there now: ${near.join(", ")}.` : "No enemy hero is visible near there now."} Count it as a lost fight and take it into your plan.`;
+	});
 }
 
 export interface LoopDeps {
@@ -171,14 +194,14 @@ export function newLoopState(): LoopState {
 
 /** What must outlive a restart besides the journal: the plan, the treasury at the end of our last turn, the turn counter. */
 export function saveLoopState(path: string, state: LoopState): void {
-	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended, memory: state.memory }));
+	writeFileSync(path, JSON.stringify({ plan: state.plan, previousEnd: state.previousEnd, deviations: state.deviations, turn: state.turn, ended: state.ended, memory: state.memory, heroesSeen: state.heroesSeen }));
 }
 
 export function loadLoopState(path: string): LoopState {
 	if(!existsSync(path))
 		return newLoopState();
 	const saved = JSON.parse(readFileSync(path, "utf8"));
-	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended, memory: saved.memory };
+	return { plan: saved.plan ? parsePlan(saved.plan) : undefined, previousEnd: saved.previousEnd, deviations: saved.deviations ?? [], turn: saved.turn ?? 0, ended: saved.ended, memory: saved.memory, heroesSeen: saved.heroesSeen };
 }
 
 function mergeSites(perHero: Record<number, Site[]>): Site[] {
@@ -264,8 +287,9 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 
 	const brief: Brief = {
 		facts, plan: state.plan, sites, blockers: collectBlockers(facts, mergeSites(sites)),
-		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: tachka.drainEvents(), memory: state.memory,
+		journal: journal.tail(facts.day, deps.memoryDays), deviations: state.deviations, messages: tachka.drainInbox(), events: [...lostHeroNotices(state.heroesSeen, facts), ...tachka.drainEvents()], memory: state.memory,
 	};
+	state.heroesSeen = facts.heroes.map(h => ({ id: h.id, name: h.name, level: h.level, units: h.army.reduce((n, a) => n + a.count, 0), pos: h.pos }));
 	tachka.publish({ type: "facts", facts: { day: facts.day, week: facts.week, dayOfWeek: facts.dayOfWeek, resources: facts.resources, income: facts.incomeSinceLastTurn, towns: facts.towns.map(t => ({ id: t.id, name: t.name, faction: t.faction, buildings: t.buildings, stock: t.recruitable, garrisonArmy: t.garrisonArmy, hasVisitingHero: t.hasVisitingHero, hasGarrisonHero: t.hasGarrisonHero })), heroes: facts.heroes, blockers: brief.blockers, plan: state.plan, memory: state.memory } });
 	deps.trace?.step("brief", renderBrief(brief));
 	let decision = parseDecision(await king.decide(brief));

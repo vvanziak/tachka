@@ -9,7 +9,7 @@ import { defaultAnswer } from "../src/questions.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
 import { nextTurn } from "../src/turn.js";
-import { loadLoopState, newLoopState, playGame, playTurn, saveLoopState } from "../src/loop.js";
+import { loadLoopState, lostHeroNotices, newLoopState, playGame, playTurn, saveLoopState } from "../src/loop.js";
 import type { Site } from "../src/missions.js";
 import type { Resources } from "../src/state.js";
 import { startFakeBridge } from "./fakeBridge.js";
@@ -510,5 +510,21 @@ describe("commands that would make the server complain", () => {
 		const walks = order.map((c, i) => c === "move_hero" ? i : -1).filter(i => i >= 0);
 		expect(order.indexOf("battle_act")).toBeGreaterThan(-1);
 		expect(walks[1]).toBeGreaterThan(order.indexOf("battle_act"));
+	});
+});
+
+describe("lostHeroNotices", () => {
+	it("names a hero that vanished between turns and the enemy heroes near its last position", () => {
+		const before = [{ id: 1, name: "Damacon", level: 4, units: 23, pos: { x: 6, y: 19, z: 0 } }, { id: 2, name: "Ajit", level: 4, units: 39, pos: { x: 30, y: 30, z: 0 } }];
+		const facts = {
+			heroes: [{ id: 2 }],
+			threats: [{ type: "hero", name: "Cuthbert", ownerColor: "orange", pos: { x: 9, y: 20, z: 0 } }, { type: "hero", name: "Far", ownerColor: "blue", pos: { x: 60, y: 60, z: 0 } }],
+		} as unknown as EconomyFacts;
+		const notices = lostHeroNotices(before, facts);
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("Damacon");
+		expect(notices[0]).toContain("Cuthbert (orange) at 9,20");
+		expect(notices[0]).not.toContain("Far");
+		expect(lostHeroNotices(undefined, facts)).toEqual([]);
 	});
 });

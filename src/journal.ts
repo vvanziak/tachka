@@ -11,7 +11,7 @@ export interface JournalEntry {
 	moves: Array<{ hero: number; target: { x: number; y: number; z: number }; intent: string; reached: boolean; stopped?: string }>;
 	deviations: unknown[];
 	/** What the king ordered besides the economy plan and the walks. */
-	orders?: { hire: unknown[]; merge: unknown[] };
+	orders?: { hire: unknown[]; merge: unknown[]; trade?: unknown[] };
 	/** What the checks found in the first decision and whether the king changed it. */
 	review?: { findings: string[]; revised: boolean };
 }

@@ -49,6 +49,16 @@ export function renderBrief(brief: Brief): string {
 			const worth = best ? ` (about ${Math.floor(2500 / best.cost.gold)} ${short(best.creature)} at ${best.cost.gold} gold each)` : "";
 			lines.push(`  tavern (hire with \`hire\`; a hero costs 2500 gold${worth}): ${t.tavern.map(h => `hero ${h.id} ${h.name} (${short(h.class)}; army ${h.army.map(a => a.count + " " + short(a.creature)).join(", ") || "none"})`).join("; ")}`);
 		}
+		if(t.rates?.length) {
+			// only what can matter: the resources we are short of, paid for with what we hold
+			const scarce = (Object.entries(facts.resources) as Array<[string, number]>).filter(([k, v]) => k !== "gold" && v < 15).map(([k]) => k);
+			const lines2 = scarce.map(get => {
+				const offers = t.rates!.filter(r => r.get === get && (facts.resources as unknown as Record<string, number>)[r.give]! >= r.giveAmount).map(r => `${r.giveAmount} ${r.give} for ${r.getAmount}`);
+				return offers.length ? `${get}: ${offers.join(", ")}` : undefined;
+			}).filter(Boolean);
+			if(lines2.length)
+				lines.push(`  marketplace rates (use \`trade\`; amount is of the resource you give): ${lines2.join("; ")}`);
+		}
 		lines.push(`  stock: ${t.recruitable.map(r => `${short(r.creature)}(lvl${r.level}) ${r.available} @${money(r.cost)}`).join("; ") || "none"}`);
 	}
 

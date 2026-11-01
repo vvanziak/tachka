@@ -356,7 +356,7 @@ describe("hiring", () => {
 		const tachka = new Tachka({ port: server.port });
 		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
 		cleanup.push(() => tachka.bridge.close(), server.close);
-		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77, why: "flag the far mines in the east" }], merge: [], hold: [] }; } };
+		const king = { async decide() { return { note: "hire", missions: [], hire: [{ town: 1, hero: 77, why: "flag the far mines in the east" }], merge: [], trade: [], hold: [] }; } };
 		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
 		const entry = journal.tail(3, 1)[0];
 		expect(entry?.deviations).toContainEqual({ kind: "hire_failed", hero: 77, town: 1 });
@@ -406,8 +406,8 @@ describe("review round", () => {
     tachka.subscribe(e => e.type === "review" && reviews.push(e.revised));
     const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
     cleanup.push(() => tachka.bridge.close(), server.close);
-    const leave = { note: "go", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "sawmill" }], hire: [], merge: [], hold: [] };
-    const king = { decide: async () => leave, revise: async () => ({ note: "stay and recruit", missions: [], hire: [], merge: [], hold: [] }) };
+    const leave = { note: "go", missions: [{ hero: 5, target: { x: 62, y: 62, z: 0 }, intent: "sawmill" }], hire: [], merge: [], trade: [], hold: [] };
+    const king = { decide: async () => leave, revise: async () => ({ note: "stay and recruit", missions: [], hire: [], merge: [], trade: [], hold: [] }) };
     await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
     expect(reviews).toEqual([true]);
     expect(calls).not.toContain("move_hero");
@@ -441,7 +441,7 @@ describe("leftover movement", () => {
 		const tachka = new Tachka({ port: server.port });
 		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
 		cleanup.push(() => tachka.bridge.close(), server.close);
-		const king = { decide: async () => ({ note: "go", missions: [{ hero: 5, target: { x: 9, y: 9, z: 0 }, intent: "to the east gate" }], hire: [], merge: [], hold }) };
+		const king = { decide: async () => ({ note: "go", missions: [{ hero: 5, target: { x: 9, y: 9, z: 0 }, intent: "to the east gate" }], hire: [], merge: [], trade: [], hold }) };
 		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
 		return { walked, entry: journal.tail(3, 1)[0] };
 	}
@@ -466,7 +466,7 @@ describe("commands that would make the server complain", () => {
 		const tachka = new Tachka({ port: server.port });
 		const journal = new Journal(join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl"));
 		cleanup.push(() => tachka.bridge.close(), server.close);
-		const king = { decide: async () => ({ note: "n", missions: [], hire: [], merge: [], hold: [], ...decisionExtra }) };
+		const king = { decide: async () => ({ note: "n", missions: [], hire: [], merge: [], trade: [], hold: [], ...decisionExtra }) };
 		await playTurn({ tachka, king, journal, memoryDays: 5 }, newLoopState());
 		return { calls, entry: journal.tail(3, 1)[0] };
 	}
@@ -526,5 +526,49 @@ describe("lostHeroNotices", () => {
 		expect(notices[0]).toContain("Cuthbert (orange) at 9,20");
 		expect(notices[0]).not.toContain("Far");
 		expect(lostHeroNotices(undefined, facts)).toEqual([]);
+	});
+});
+
+describe("trade orders", () => {
+	it("trades before the plan builds and reports a refused trade", async () => {
+		const calls: Array<{ cmd: string; args: any }> = [];
+		const server = await startFakeBridge((cmd, args: any) => {
+			calls.push({ cmd, args });
+			switch(cmd) {
+			case "get_state":
+				return {
+					day: 4, week: 1, dayOfWeek: 4, resources: res({ gold: 3000, wood: 40, ore: 10 }),
+					towns: [{ id: 11, name: "T", faction: "core:stronghold", pos: { x: 0, y: 0, z: 0 }, builtThisTurn: false, visitingHero: -1, garrisonHero: -1, buildings: ["core:marketplace"], recruitable: [] }],
+					heroes: [],
+				};
+			case "market_rates":
+				return { marketplace: true, rates: [{ give: "wood", get: "crystal", giveAmount: 4, getAmount: 1 }] };
+			case "trade":
+				if(args.give === "ore")
+					throw Object.assign(new Error("the rate is 4 ore for 1 crystal"), { name: "BridgeError" });
+				return { rate: { give: 4, get: 1 }, resources: {} };
+			case "wait_for_turn":
+				return { yourTurn: true, battle: false };
+			default:
+				return [];
+			}
+		});
+		const tachka = new Tachka({ port: server.port });
+		const file = join(mkdtempSync(join(tmpdir(), "tachka-")), "journal.jsonl");
+		cleanup.push(() => tachka.bridge.close(), server.close);
+		const king = {
+			decide: async () => ({
+				note: "buy crystal", missions: [], hire: [], merge: [], hold: [],
+				trade: [{ town: 11, give: "wood" as const, get: "crystal" as const, amount: 40, why: "crystal for the lvl 5 dwelling" }, { town: 11, give: "ore" as const, get: "crystal" as const, amount: 10, why: "crystal for the lvl 5 dwelling" }],
+			}),
+		};
+
+		await playTurn({ tachka, king, journal: new Journal(file), memoryDays: 5 }, newLoopState());
+
+		const trades = calls.filter(c => c.cmd === "trade");
+		expect(trades[0]?.args).toEqual({ town: 11, give: "wood", get: "crystal", amount: 40 });
+		const entry = JSON.parse(readFileSync(file, "utf8").trim());
+		expect(entry.orders.trade).toEqual([expect.objectContaining({ give: "wood", get: "crystal", amount: 40, rate: { give: 4, get: 1 } })]);
+		expect(entry.deviations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "trade_failed", error: expect.stringContaining("4 ore") })]));
 	});
 });

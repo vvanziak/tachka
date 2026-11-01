@@ -9,6 +9,8 @@ import type { Finding } from "./review.js";
 import { defaultAnswer, type AnswerContext, type Question } from "./questions.js";
 import type { KingUsage } from "./core.js";
 
+const RESOURCE_KINDS = ["wood", "mercury", "ore", "sulfur", "crystal", "gems", "gold"] as const;
+
 const pos = z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).strict();
 
 export const memorySchema = z.object({
@@ -59,6 +61,8 @@ export const decisionSchema = z.object({
 	/** `why` is the job the hero will do that nobody else can; it goes to the journal. */
 	hire: z.array(z.object({ town: z.number().int(), hero: z.number().int(), why: z.string().min(15) }).strict()).default([]),
 	merge: z.array(z.object({ from: z.number().int(), to: z.number().int() }).strict()).default([]),
+	/** Marketplace exchanges, done before the economy plan builds: `amount` of `give` for `get` at the town's rate. */
+	trade: z.array(z.object({ town: z.number().int(), give: z.enum(RESOURCE_KINDS), get: z.enum(RESOURCE_KINDS), amount: z.number().int().positive(), why: z.string().min(10) }).strict()).default([]),
 	/** Heroes that stay where they are this turn; every other hero uses up its movement. */
 	hold: z.array(z.number().int()).default([]),
 	/** Rewrites the strategy memory that is shown to you at the top of every brief. */
@@ -134,7 +138,7 @@ export class ScriptedKing implements King {
 		return {
 			note: stale ? "default economy plan; heroes visit supply sites first, then the nearest site" : "keep the plan; heroes continue",
 			plan: stale ? defaultPlan(facts) : undefined,
-			missions, hire: [], merge: [], hold: [],
+			missions, hire: [], merge: [], trade: [], hold: [],
 		};
 	}
 

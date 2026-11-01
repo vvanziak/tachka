@@ -30,6 +30,15 @@ export interface TownFacts {
 	/** Units standing in the town's own garrison. */
 	garrison: number;
 	garrisonArmy: Array<{ creature: string; count: number }>;
+	/** What the marketplace charges, when the town has one. */
+	rates?: MarketRate[];
+}
+
+export interface MarketRate {
+	give: string;
+	get: string;
+	giveAmount: number;
+	getAmount: number;
 }
 
 export interface EconomyFacts {
@@ -79,6 +88,11 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 				return [];
 			throw e;
 		}) : [];
+		const rates = town.buildings.includes("core:marketplace") ? await bridge.call<{ rates: MarketRate[] }>("market_rates", { town: town.id }).then(r => r.rates).catch(e => {
+			if(e instanceof BridgeError)
+				return undefined;
+			throw e;
+		}) : undefined;
 		towns.push({
 			id: town.id,
 			name: town.name,
@@ -93,6 +107,7 @@ export async function collectFacts(bridge: BridgeClient, previousEnd?: Resources
 			tavern,
 			garrison: (town.army ?? []).reduce((n, a) => n + a.count, 0),
 			garrisonArmy: (town.army ?? []).map(a => ({ creature: a.creature, count: a.count })),
+			rates,
 		});
 	}
 

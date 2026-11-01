@@ -83,7 +83,7 @@ export class LlmKing implements King {
 			}
 		}
 		this.ms = Date.now() - started;
-		return { note: `The king could not decide (${lastError.slice(0, 200)}); the current plan keeps running and heroes stand still.`, missions: [], hire: [], merge: [], hold: [] };
+		return { note: `The king could not decide (${lastError.slice(0, 200)}); the current plan keeps running and heroes stand still.`, missions: [], hire: [], merge: [], trade: [], hold: [] };
 	}
 
 	async revise(brief: Brief, decision: Decision, findings: Finding[]): Promise<Decision> {

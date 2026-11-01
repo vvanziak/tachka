@@ -320,6 +320,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	}
 
 	const deviations: unknown[] = [];
+	const trades: Array<Record<string, unknown>> = [];
 	const rejected = async (action: string, run: () => Promise<unknown>) => {
 		try { await run(); }
 		catch(e) {
@@ -328,6 +329,25 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 			deviations.push({ kind: "rejected", action, error: e.message });
 		}
 	};
+
+	// trades come first: the plan builds with what they bring
+	for(const t of decision.trade) {
+		const have = facts.resources[t.give];
+		const amount = Math.min(t.amount, have);
+		if(amount <= 0) {
+			deviations.push({ kind: "trade_failed", trade: t, error: `no ${t.give} to give` });
+			continue;
+		}
+		try {
+			const result = await bridge.call<{ rate: { give: number; get: number } }>("trade", { town: t.town, give: t.give, get: t.get, amount });
+			trades.push({ ...t, amount, rate: result.rate });
+		}
+		catch(e) {
+			if(!(e instanceof BridgeError))
+				throw e;
+			deviations.push({ kind: "trade_failed", trade: t, error: e.message });
+		}
+	}
 
 	let economy: ExecutionReport | undefined;
 	if(state.plan) {
@@ -407,7 +427,7 @@ export async function playTurn(deps: LoopDeps, state: LoopState): Promise<boolea
 	journal.append({
 		day: facts.day, turn: state.turn, note: decision.note,
 		built: economy?.built ?? [], recruited: economy?.recruited ?? [], moves, deviations,
-		orders: { hire: decision.hire, merge: decision.merge },
+		orders: { hire: decision.hire, merge: decision.merge, trade: trades },
 		review: findings.length ? { findings: findings.map(f => f.code), revised } : undefined,
 	});
 	state.deviations = deviations;

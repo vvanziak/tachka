@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Brain, BrainReply } from "./brain.js";
 import type { Exchange } from "./bridge.js";
 
 /** The steps of a turn in the order they happen; the number is part of the file name. */
@@ -14,6 +15,7 @@ const MAX_RESULT_CHARS = 1500;
  */
 export class Trace {
 	private day: number | undefined;
+	private requests = 0;
 	private calls: Array<Record<string, unknown>> = [];
 	private pending: Array<{ step: TraceStep; data: unknown }> = [];
 
@@ -33,6 +35,7 @@ export class Trace {
 	/** Steps that happen before the day is known (settling dialogs) wait here and are written by `begin`. */
 	begin(day: number): void {
 		this.day = day;
+		this.requests = 0;
 		for(const p of this.pending)
 			this.write(p.step, p.data);
 		this.pending = [];
@@ -44,6 +47,14 @@ export class Trace {
 			return;
 		}
 		this.write(step, { data, calls: this.take() });
+	}
+
+	/** One model request exactly as sent (system prompt, schema, user text) and what came back. */
+	request(label: string, sent: { system: string; user: string; schema?: object }, received: { reply?: unknown; usage?: unknown; ms: number; error?: string }): void {
+		const base = this.day === undefined || label === "talker" ? `${label}-${Date.now()}` : `${String(this.day).padStart(3, "0")}.${TRACE_STEPS.decision}.${++this.requests}-${label}`;
+		const text = [`# ${label} request (${sent.system.length} + ${sent.user.length} characters)`, "## SYSTEM PROMPT", sent.system, ...(sent.schema ? ["## RESPONSE SCHEMA", JSON.stringify(sent.schema)] : []), "## USER MESSAGE", sent.user].join("\n\n");
+		writeFileSync(join(this.dir, `${base}-request.md`), text);
+		writeFileSync(join(this.dir, `${base}-response.json`), JSON.stringify(received, null, 1));
 	}
 
 	/** Called when a turn is over, so the next one starts without a day. */
@@ -66,5 +77,40 @@ export class Trace {
 		}
 		else
 			writeFileSync(join(this.dir, `${name}.json`), JSON.stringify(content, null, 1));
+	}
+}
+
+/** Wraps a brain and writes every request and answer to the trace. */
+export class TracedBrain implements Brain {
+	readonly name: string;
+
+	constructor(private readonly inner: Brain, private readonly trace: Trace, private readonly label: string) {
+		this.name = inner.name;
+	}
+
+	async complete(system: string, user: string, schema: object): Promise<BrainReply> {
+		const started = Date.now();
+		try {
+			const reply = await this.inner.complete(system, user, schema);
+			this.trace.request(this.label, { system, user, schema }, { reply: reply.json, usage: reply.usage, ms: Date.now() - started });
+			return reply;
+		}
+		catch(e) {
+			this.trace.request(this.label, { system, user, schema }, { error: e instanceof Error ? e.message : String(e), ms: Date.now() - started });
+			throw e;
+		}
+	}
+
+	async say(system: string, user: string): Promise<{ text: string; usage: BrainReply["usage"] }> {
+		const started = Date.now();
+		try {
+			const reply = await this.inner.say(system, user);
+			this.trace.request(this.label, { system, user }, { reply: reply.text, usage: reply.usage, ms: Date.now() - started });
+			return reply;
+		}
+		catch(e) {
+			this.trace.request(this.label, { system, user }, { error: e instanceof Error ? e.message : String(e), ms: Date.now() - started });
+			throw e;
+		}
 	}
 }

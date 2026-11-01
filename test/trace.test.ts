@@ -6,7 +6,7 @@ import { Tachka } from "../src/core.js";
 import { Journal } from "../src/journal.js";
 import { ScriptedKing } from "../src/king.js";
 import { newLoopState, playTurn } from "../src/loop.js";
-import { Trace } from "../src/trace.js";
+import { TracedBrain, Trace } from "../src/trace.js";
 import { startFakeBridge } from "./fakeBridge.js";
 
 let cleanup: Array<() => unknown> = [];
@@ -43,5 +43,24 @@ describe("Trace", () => {
 		expect(facts.data.facts.day).toBe(7);
 		expect(facts.calls.map((c: { cmd: string }) => c.cmd)).toContain("get_state");
 		expect(readFileSync(join(dir, "turns", "007.3-brief.md"), "utf8")).toContain("REACHABLE SITES");
+	});
+});
+
+describe("TracedBrain", () => {
+	it("writes the full request and the answer of every model call", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "tachka-trace-"));
+		const trace = new Trace(dir);
+		trace.begin(12);
+		const brain = new TracedBrain({
+			name: "fake",
+			complete: async () => ({ json: { ask: [] }, usage: { inputTokens: 5, outputTokens: 1, costUsd: 0 } }),
+			say: async () => ({ text: "hi", usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 } }),
+		}, trace, "king");
+		await brain.complete("SYS", "USER TEXT", { type: "object" });
+		expect(readdirSync(dir)).toEqual(["012.4.1-king-request.md", "012.4.1-king-response.json"]);
+		const request = readFileSync(join(dir, "012.4.1-king-request.md"), "utf8");
+		expect(request).toContain("SYS");
+		expect(request).toContain("USER TEXT");
+		expect(JSON.parse(readFileSync(join(dir, "012.4.1-king-response.json"), "utf8")).usage.inputTokens).toBe(5);
 	});
 });

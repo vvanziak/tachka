@@ -12,7 +12,7 @@ import { jsonlRecorder } from "./recorder.js";
 import { startServer } from "./server.js";
 import { Situation } from "./situation.js";
 import { Talker } from "./talker.js";
-import { Trace } from "./trace.js";
+import { TracedBrain, Trace } from "./trace.js";
 
 const args = new Map<string, string>();
 for(let i = 2; i < process.argv.length; i++) {
@@ -85,7 +85,8 @@ try {
 		if(kingKind === "scripted")
 			king = new ScriptedKing();
 		else {
-			const brain: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--model") ?? "sonnet");
+			const plain: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--model") ?? "sonnet");
+			const brain: Brain = trace ? new TracedBrain(plain, trace, "king") : plain;
 			king = new LlmKing(brain, {
 				onProblem: text => tachka.publish({ type: "problem", text }),
 				query: (cmd, args) => tachka.bridge.call(cmd, args),
@@ -95,7 +96,8 @@ try {
 		}
 
 		// the talker answers at any moment; it uses the king's model, or the claude CLI when the king is a script
-		const talkBrain: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--chat-model") ?? "sonnet");
+		const plainTalk: Brain = kingKind === "api" ? new AnthropicBrain() : new ClaudeCliBrain(args.get("--chat-model") ?? "sonnet");
+		const talkBrain: Brain = trace ? new TracedBrain(plainTalk, trace, "talker") : plainTalk;
 		const situation = new Situation(tachka, journal);
 		new Talker(tachka, talkBrain, () => situation.describe(), `${dir}/chat.jsonl`);
 

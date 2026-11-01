@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "play": "tsx src/play.ts",
-    "assets": "tsx tools/extract-assets.ts"
+    "assets": "tsx tools/extract-assets.ts",
+    "stats": "tsx tools/compare-stats.ts"
   },
   "type": "module",
   "devDependencies": {

@@ -104,14 +104,18 @@ fetch("/assets/manifest.json").then(r => r.ok ? r.json() : assets).then(m => { a
 let lastFacts;
 // "Dragon Flies" in running text becomes "Dragon Flies <icon>"; tags are left alone
 let nameRegex;
+const RESOURCE_WORDS = { wood: "wood", mercury: "mercury", ore: "ore", sulfur: "sulfur", sulphur: "sulfur", crystal: "crystal", crystals: "crystal", gems: "gems", gold: "gold" };
 function decorate(html) {
-  const names = Object.keys(assets.creatureNames || {});
+  const resourceWords = Object.keys(RESOURCE_WORDS).filter(w => (assets.resources || []).includes(RESOURCE_WORDS[w]));
+  const names = [...Object.keys(assets.creatureNames || {}), ...resourceWords];
   if (!names.length) return html;
   nameRegex ||= new RegExp("\\b(" + names.sort((a, b) => b.length - a.length).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b", "gi");
   nameRegex.lastIndex = 0;
   return html.split(/(<[^>]+>)/).map((part, i) => i % 2 ? part : part.replace(nameRegex, (m) => {
-    const id = assets.creatureNames[m.toLowerCase()];
-    return `${m}${id ? " " + img(`creatures/${id}.png`, m, 22) : ""}`;
+    const key = m.toLowerCase();
+    const id = (assets.creatureNames || {})[key];
+    const resource = RESOURCE_WORDS[key];
+    return `${m}${id ? " " + img(`creatures/${id}.png`, m, 22) : resource ? " " + img(`resources/${resource}.png`, m, 18) : ""}`;
   })).join("");
 }
 const img = (path, title, size) => `<img class="icon" src="/assets/${path}" alt="" title="${esc(title)}" width="${size}" height="${size}">`;

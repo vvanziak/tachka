@@ -78,7 +78,7 @@ pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size
   <div class="chat">
     <div id="feed" aria-live="polite"></div>
     <form id="form">
-      <textarea id="text" placeholder="Talk to the king, or give an emergency order: !retreat, !hold [hero], !go hero x y [fight]" aria-label="Message to the king"></textarea>
+      <textarea id="text" placeholder="Talk to the king: advice, a question, a change of plan…" aria-label="Message to the king"></textarea>
       <button class="primary" type="submit">Send</button>
     </form>
   </div>
@@ -172,7 +172,6 @@ function handle(e) {
       add("thought", `<b>Day ${lastDay}</b> ${esc(e.note)}<br><small>${tokens(e.usage.inputTokens)} in / ${tokens(e.usage.outputTokens)} out${e.usage.costUsd ? " · $" + e.usage.costUsd.toFixed(3) : ""}${e.ms ? " · " + (e.ms / 1000).toFixed(1) + " s" : ""}</small>`);
       $("cost").textContent = e.total.inputTokens ? `${tokens(e.total.inputTokens + e.total.outputTokens)} tokens${e.total.costUsd ? " · $" + e.total.costUsd.toFixed(2) : ""}` : "";
       status("acting", true); break;
-    case "command": add("msg human", "<code>" + esc(e.text) + "</code>"); break;
     case "chat": add(e.from === "human" ? "msg human" : "msg", esc(e.text)); break;
     case "turn": add("turn", `<b>Day ${e.day}</b> ${esc(e.line)}`); status("waiting for my turn", false); break;
     case "status": status(e.text, false); add("turn", esc(e.text)); break;
